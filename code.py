@@ -6,11 +6,11 @@ import requests
 import sys
 
 # ===== CONFIG =====
-TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"
-CHAT_ID = "@bitcoin500alerts"   # bot MUST be admin
+TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"   # rotate your token
+CHAT_ID = "@bitcoin500alerts"             # bot must be admin
 PORT = 8000
 CHECK_INTERVAL = 1
-PRICE_THRESHOLD = 499# LOW for testing
+PRICE_THRESHOLD = 499   # ≈ ±500 USD
 
 # ===== BINANCE =====
 client = Client("", "")
@@ -25,7 +25,8 @@ def send_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
         "chat_id": CHAT_ID,
-        "text": text
+        "text": text,
+        "parse_mode": "Markdown"
     }
     r = requests.post(url, json=payload, timeout=10)
     log("[TELEGRAM RESPONSE]", r.text)
@@ -52,8 +53,7 @@ def btc_loop():
     try:
         start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
         log("[START PRICE]", start_price)
-        send_telegram(f"BTC = {start_price}")
-
+        send_telegram(f"✅ Bot started\nBTC = `{start_price}`")
     except Exception as e:
         log("[BINANCE ERROR AT START]", e)
         return
@@ -65,19 +65,20 @@ def btc_loop():
 
             log("[PRICE]", price, "Δ", diff)
 
-           if abs(diff) >= PRICE_THRESHOLD:
-               arrow = "⬆️" if diff > 0 else "⬇️"
-               sign = "+" if diff > 0 else ""
+            if abs(diff) >= PRICE_THRESHOLD:
+                arrow = "⬆️" if diff > 0 else "⬇️"
+                sign = "+" if diff > 0 else ""
 
-               msg = (
-                        f"{arrow} *BTC PRICE ALERT*\n\n"
-                        f"💰 Price: `${price:,.2f}`\n"
-                        f"📊 Change: `{sign}{diff:,.2f} USD`"
-               )  
+                msg = (
+                    f"{arrow} *BTC PRICE ALERT*\n\n"
+                    f"💰 Price: `${price:,.2f}`\n"
+                    f"📊 Change: `{sign}{diff:,.2f} USD`"
+                )
 
-               send_telegram(msg)
-               start_price = price
+                send_telegram(msg)
+                start_price = price
 
+            time.sleep(CHECK_INTERVAL)
 
         except Exception as e:
             log("[LOOP ERROR]", e)
@@ -93,8 +94,4 @@ if __name__ == "__main__":
     ).start()
 
     time.sleep(2)  # allow health server to bind
-
     btc_loop()
-
-
-
