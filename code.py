@@ -3,31 +3,34 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from binance import Client
 import requests
+import sys
 
 # ===== CONFIG =====
 TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"
-CHAT_IDS = ["@bitcoin500alerts"]   # channel must be admin-added
+CHAT_ID = "@bitcoin500alerts"   # bot MUST be admin
 PORT = 8000
 CHECK_INTERVAL = 5
-PRICE_THRESHOLD = 500
+PRICE_THRESHOLD = 5  # LOW for testing
 
 # ===== BINANCE =====
 client = Client("", "")
-start_price = None
+
+# ===== FORCE LOG FLUSH =====
+def log(*args):
+    print(*args)
+    sys.stdout.flush()
 
 # ===== TELEGRAM SEND =====
-def send_telegram(msg):
-    for chat in CHAT_IDS:
-        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-        payload = {
-            "chat_id": chat,
-            "text": msg,
-            "parse_mode": "Markdown"
-        }
-        r = requests.post(url, json=payload, timeout=10)
-        print("[TELEGRAM]", r.text)
+def send_telegram(text):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text
+    }
+    r = requests.post(url, json=payload, timeout=10)
+    log("[TELEGRAM RESPONSE]", r.text)
 
-# ===== HEALTH CHECK =====
+# ===== HEALTH CHECK SERVER =====
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -38,33 +41,50 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-def health_server():
+def start_health_server():
+    log("[HEALTH] Starting health server on port", PORT)
     HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ===== PRICE LOOP =====
-def price_loop():
-    global start_price
-    start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
-    print("[START]", start_price)
+# ===== BTC LOOP =====
+def btc_loop():
+    log("[BOT] BTC loop starting")
+
+    try:
+        start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
+        log("[START PRICE]", start_price)
+        send_telegram(f"✅ Bot started\nBTC = {start_price}")
+
+    except Exception as e:
+        log("[BINANCE ERROR AT START]", e)
+        return
 
     while True:
         try:
             price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
             diff = price - start_price
-            print("[PRICE]", price, diff)
+
+            log("[PRICE]", price, "Δ", diff)
 
             if abs(diff) >= PRICE_THRESHOLD:
-                msg = f"🚨 *BTC ALERT*\nPrice: `{price}`\nChange: `{diff:+}`"
+                msg = f"🚨 BTC ALERT\nPrice: {price}\nChange: {diff:+}"
                 send_telegram(msg)
                 start_price = price
 
             time.sleep(CHECK_INTERVAL)
 
         except Exception as e:
-            print("[ERROR]", e)
+            log("[LOOP ERROR]", e)
             time.sleep(5)
 
-# ===== START =====
+# ===== MAIN =====
 if __name__ == "__main__":
-    threading.Thread(target=health_server, daemon=True).start()
-    price_loop()
+    log("=== APP BOOTING ===")
+
+    threading.Thread(
+        target=start_health_server,
+        daemon=True
+    ).start()
+
+    time.sleep(2)  # allow health server to bind
+
+    btc_loop()
