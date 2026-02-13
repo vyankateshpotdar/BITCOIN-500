@@ -1,5 +1,5 @@
 import asyncio
-from binance import Client
+import requests
 from telegram import Bot
 
 # === CONFIG ===
@@ -20,9 +20,12 @@ start_price = None  # Reference price when bot starts
 # === FUNCTIONS ===
 
 def get_btc_price():
-    """Fetch latest BTC price from Binance"""
-    ticker = client.get_symbol_ticker(symbol="BTCUSDT")
-    return float(ticker["price"])
+    r = requests.get(
+        "https://api.binance.com/api/v3/ticker/price",
+        params={"symbol": "BTCUSDT"},
+        timeout=10
+    )
+    return float(r.json()["price"])
 
 async def send_alert(current_price, diff):
     """Send alert with static image and up/down arrow"""
@@ -63,3 +66,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
