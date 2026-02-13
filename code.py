@@ -53,7 +53,7 @@ def btc_loop():
     try:
         start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
         log("[START PRICE]", start_price)
-        send_telegram(f"✅ Bot started\nBTC = `{start_price}`")
+        send_telegram(f"BTC = `{start_price}`")
     except Exception as e:
         log("[BINANCE ERROR AT START]", e)
         return
@@ -95,3 +95,4 @@ if __name__ == "__main__":
 
     time.sleep(2)  # allow health server to bind
     btc_loop()
+
