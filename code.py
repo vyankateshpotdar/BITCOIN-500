@@ -88,6 +88,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    threading.Thread(target=keep_alive, daemon=True).start()
     asyncio.run(main())
+
 
 
