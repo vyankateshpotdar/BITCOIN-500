@@ -1,3 +1,5 @@
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import asyncio
 from binance import Client
 from telegram import Bot
@@ -74,8 +76,18 @@ async def main():
         except Exception as e:
             print("Error:", e)
             await asyncio.sleep(PRICE_CHECK_INTERVAL)
+    def keep_alive():
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+
+    server = HTTPServer(("0.0.0.0", 8000), Handler)
+    server.serve_forever()
 
 
 if __name__ == "__main__":
     asyncio.run(main())
+
 
