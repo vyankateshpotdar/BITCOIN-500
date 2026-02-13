@@ -65,12 +65,19 @@ def btc_loop():
 
             log("[PRICE]", price, "Δ", diff)
 
-            if abs(diff) >= PRICE_THRESHOLD:
-                msg = f"🚨 BTC ALERT\nPrice: {price}\nChange: {diff:+}"
-                send_telegram(msg)
-                start_price = price
+           if abs(diff) >= PRICE_THRESHOLD:
+               arrow = "⬆️" if diff > 0 else "⬇️"
+               sign = "+" if diff > 0 else ""
 
-            time.sleep(CHECK_INTERVAL)
+               msg = (
+                        f"{arrow} *BTC PRICE ALERT*\n\n"
+                        f"💰 Price: `${price:,.2f}`\n"
+                        f"📊 Change: `{sign}{diff:,.2f} USD`"
+               )  
+
+               send_telegram(msg)
+               start_price = price
+
 
         except Exception as e:
             log("[LOOP ERROR]", e)
@@ -88,5 +95,6 @@ if __name__ == "__main__":
     time.sleep(2)  # allow health server to bind
 
     btc_loop()
+
 
 
