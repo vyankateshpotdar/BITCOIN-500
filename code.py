@@ -1,30 +1,36 @@
-import asyncio
+import time
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from binance import Client
-from telegram import Bot
+import requests
 
-# ================= CONFIG =================
+# ===== CONFIG =====
 TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"
-CHANNELS = ["@bitcoin500alerts"]
-
-BINANCE_API_KEY = "G3dDgpY3WUrxJBzOsaWX0BsTg58E8iKeYzkdV0hC6"
-BINANCE_SECRET_KEY = "HX00iwkZvewblwC4qGpFuJMYcLiKywENC7bkPElSDlLvtkLtTFNZH5oaWuOg0cgP"
-
+CHAT_IDS = ["@bitcoin500alerts"]   # channel must be admin-added
 PORT = 8000
-PRICE_CHECK_INTERVAL = 5
-PRICE_CHANGE_THRESHOLD = 500
+CHECK_INTERVAL = 5
+PRICE_THRESHOLD = 500
 
-# ================= INIT =================
-bot = Bot(token=TELEGRAM_TOKEN)
-client = Client(BINANCE_API_KEY, BINANCE_SECRET_KEY)
+# ===== BINANCE =====
+client = Client("", "")
 start_price = None
 
-# ================= HEALTH SERVER =================
+# ===== TELEGRAM SEND =====
+def send_telegram(msg):
+    for chat in CHAT_IDS:
+        url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+        payload = {
+            "chat_id": chat,
+            "text": msg,
+            "parse_mode": "Markdown"
+        }
+        r = requests.post(url, json=payload, timeout=10)
+        print("[TELEGRAM]", r.text)
+
+# ===== HEALTH CHECK =====
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(b"OK")
 
@@ -32,54 +38,33 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-def run_server():
-    server = HTTPServer(("0.0.0.0", PORT), Handler)
-    print(f"[HEALTH] Server running on port {PORT}")
-    server.serve_forever()
+def health_server():
+    HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
 
-# ================= BOT LOGIC =================
-def get_btc_price():
-    price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
-    print(f"[BINANCE] BTCUSDT = {price}")
-    return price
-
-def send_alert_sync(price, diff):
-    arrow = "⬆️" if diff >= 0 else "⬇️"
-    msg = (
-        f"{arrow} *BTC Price Alert*\n\n"
-        f"Price: `${price:,.2f}`\n"
-        f"Change: `{diff:+,.2f}` USD"
-    )
-
-    for ch in CHANNELS:
-        try:
-            bot.send_message(chat_id=ch, text=msg, parse_mode="Markdown")
-            print(f"[TELEGRAM] Alert sent to {ch}")
-        except Exception as e:
-            print("[TELEGRAM ERROR]", e)
-
-async def main():
+# ===== PRICE LOOP =====
+def price_loop():
     global start_price
-    start_price = get_btc_price()
-    print(f"[STARTED] Tracking BTC from {start_price}")
+    start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
+    print("[START]", start_price)
 
     while True:
         try:
-            price = get_btc_price()
+            price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
             diff = price - start_price
-            print(f"[PRICE] BTC={price} | Δ={diff}")
+            print("[PRICE]", price, diff)
 
-            if abs(diff) >= PRICE_CHANGE_THRESHOLD:
-                send_alert_sync(price, diff)
+            if abs(diff) >= PRICE_THRESHOLD:
+                msg = f"🚨 *BTC ALERT*\nPrice: `{price}`\nChange: `{diff:+}`"
+                send_telegram(msg)
                 start_price = price
 
-            await asyncio.sleep(PRICE_CHECK_INTERVAL)
+            time.sleep(CHECK_INTERVAL)
 
         except Exception as e:
             print("[ERROR]", e)
-            await asyncio.sleep(5)
+            time.sleep(5)
 
-# ================= START =================
+# ===== START =====
 if __name__ == "__main__":
-    threading.Thread(target=run_server, daemon=True).start()
-    asyncio.run(main())
+    threading.Thread(target=health_server, daemon=True).start()
+    price_loop()
