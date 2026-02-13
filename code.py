@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"
 CHAT_ID = "@bitcoin500alerts"   # bot MUST be admin
 PORT = 8000
 CHECK_INTERVAL = 5
-PRICE_THRESHOLD = 5  # LOW for testing
+PRICE_THRESHOLD = 499# LOW for testing
 
 # ===== BINANCE =====
 client = Client("", "")
@@ -52,7 +52,7 @@ def btc_loop():
     try:
         start_price = float(client.get_symbol_ticker(symbol="BTCUSDT")["price"])
         log("[START PRICE]", start_price)
-        send_telegram(f"✅ Bot started\nBTC = {start_price}")
+        send_telegram(f"BTC = {start_price}")
 
     except Exception as e:
         log("[BINANCE ERROR AT START]", e)
@@ -88,3 +88,4 @@ if __name__ == "__main__":
     time.sleep(2)  # allow health server to bind
 
     btc_loop()
+
