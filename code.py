@@ -9,7 +9,7 @@ import sys
 TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"
 CHAT_ID = "@bitcoin500alerts"   # bot MUST be admin
 PORT = 8000
-CHECK_INTERVAL = 5
+CHECK_INTERVAL = 1
 PRICE_THRESHOLD = 499# LOW for testing
 
 # ===== BINANCE =====
@@ -88,4 +88,5 @@ if __name__ == "__main__":
     time.sleep(2)  # allow health server to bind
 
     btc_loop()
+
 
