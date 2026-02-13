@@ -10,8 +10,22 @@ BINANCE_SECRET_KEY = "HX00iwkZvewblwC4qGpFuJMYcLiKywENC7bkPElSDlLvtkLtTFNZH5oaWu
 PRICE_CHECK_INTERVAL = 1  # seconds
 PRICE_CHANGE_THRESHOLD = 500  # USD
 ALERT_IMAGE_PATH = "alert_image.png"  # Your static 16:9 image
+import os
+from binance.client import Client
 
-# === INIT ===
+# Check if running in GitHub Actions
+is_ci = os.environ.get("CI_ENVIRONMENT", "false").lower() == "true"
+
+if is_ci:
+    print("Running in CI/CD - Skipping live Binance API calls")
+    # Use mock data or skip API calls
+    # Or run non-API dependent parts of your code
+else:
+    # Live API calls for local development
+    api_key = os.environ.get("BINANCE_API_KEY")
+    api_secret = os.environ.get("BINANCE_API_SECRET")
+    client = Client(api_key, api_secret)
+    # === INIT ===
 bot = Bot(token=TELEGRAM_TOKEN)
 client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_SECRET_KEY)
 
@@ -61,5 +75,7 @@ async def main():
             print("Error:", e)
             await asyncio.sleep(PRICE_CHECK_INTERVAL)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
+
