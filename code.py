@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = "8349405657:AAH8UDEIe5mRs1um9ejFXTOMKTqwdo1I6oA"   # rotate you
 CHAT_ID = "@bitcoin500alerts"             # bot must be admin
 PORT = 8000
 CHECK_INTERVAL = 1
-PRICE_THRESHOLD = 499   # ≈ ±500 USD
+PRICE_THRESHOLD = 500   # ≈ ±500 USD
 
 # ===== BINANCE =====
 client = Client("", "")
@@ -70,8 +70,7 @@ def btc_loop():
                 sign = "+" if diff > 0 else ""
 
                 msg = (
-                    f"{arrow} *BTC PRICE ALERT*\n\n"
-                    f"💰 Price: `${price:,.2f}`\n"
+                    f"{arrow} BTC : ${price:,.2f}\n "
                     f"📊 Change: `{sign}{diff:,.2f} USD`"
                 )
 
@@ -95,4 +94,5 @@ if __name__ == "__main__":
 
     time.sleep(2)  # allow health server to bind
     btc_loop()
+
 
