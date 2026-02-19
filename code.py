@@ -66,11 +66,11 @@ def btc_loop():
             log("[PRICE]", price, "Δ", diff)
 
             if abs(diff) >= PRICE_THRESHOLD:
-                arrow = "⬆️" if diff > 0 else "⬇️"
+                arrow = "↑" if diff > 0 else "↓"
                 sign = "+" if diff > 0 else ""
 
                 msg = (
-                    f"{arrow} BTC : ${price:,.2f}\n "
+                    f"*{arrow} ₿ = ${price:,.2f}*\n"
                     f"📊 Change: `{sign}{diff:,.2f} USD`"
                 )
 
@@ -94,5 +94,6 @@ if __name__ == "__main__":
 
     time.sleep(2)  # allow health server to bind
     btc_loop()
+
 
 
