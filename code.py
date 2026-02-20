@@ -71,7 +71,7 @@ def btc_loop():
 
                 msg = (
                     f"*{arrow} ₿ = ${price:,.2f}*\n"
-                    f"📊 Change: `{sign}{diff:,.2f} USD`"
+                    f"*Change = `{sign}{diff:,.2f} USD`*"
                 )
 
                 send_telegram(msg)
@@ -94,6 +94,7 @@ if __name__ == "__main__":
 
     time.sleep(2)  # allow health server to bind
     btc_loop()
+
 
 
 
