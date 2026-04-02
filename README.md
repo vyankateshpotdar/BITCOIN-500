@@ -1,9 +1,15 @@
-# BITCOIN-500
+# ₿ BITCOIN-500
 
 Welcome to the **BITCOIN-500** repository! 🚀  
 
+# ₿ BITCOIN-500 🚀
+
+![Bitcoin](https://img.shields.io/badge/Bitcoin-Project-orange?logo=bitcoin)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Visitor Count](https://komarev.com/ghpvc/?username=vyankateshpotdar&color=blue)
+![Visitors](https://komarev.com/ghpvc/?username=vyankateshpotdar&style=for-the-badge)
+
+![Stars](https://img.shields.io/github/stars/vyankateshpotdar/BITCOIN-500?style=social)
+![Forks](https://img.shields.io/github/forks/vyankateshpotdar/BITCOIN-500?style=social)
 
 ## Overview  
 The BITCOIN-500 is a Bitcoin price alert bot designed to keep you informed about significant price movements in the Bitcoin market. This bot operates specifically on movements of ±$500, ensuring you get timely alerts without being overwhelmed by more minor fluctuations.
