@@ -2,8 +2,6 @@
 
 Welcome to the **BITCOIN-500** repository! 🚀  
 
-# ₿ BITCOIN-500 🚀
-
 ![Bitcoin](https://img.shields.io/badge/Bitcoin-Project-orange?logo=bitcoin)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![PRs](https://img.shields.io/github/issues-pr/vyankateshpotdar/BITCOIN-500)
