@@ -2,8 +2,6 @@
 
 Welcome to the **BITCOIN-500** repository! 🚀  
 
-# My Project
-
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Visitor Count](https://komarev.com/ghpvc/?username=vyankateshpotdar&color=blue)
 
