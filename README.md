@@ -14,7 +14,7 @@ The BITCOIN-500 is a Bitcoin price alert bot designed to keep you informed about
 1. **Clone the Repository**: `git clone https://github.com/vyankateshpotdar/BITCOIN-500.git`
 2. **Install Dependencies**: Run `npm install` to install the necessary packages.
 3. **Configure the Bot**: Edit the configuration file to set your alert preferences.
-4. **Run the Bot**: Start the bot using `node bot.py` and stay updated with Bitcoin price movements!
+4. **Run the Bot**: Start the bot using `python main.py` and stay updated with Bitcoin price movements!
 
 ## Contributing  
 Contributions are welcome! If you would like to contribute to the development of BITCOIN-500, please create a pull request. 
