@@ -1,5 +1,8 @@
 # ₿ BITCOIN-500
-![Visitors](https://komarev.com/ghpvc/?username=vyankateshpotdar&style=for-the-badge&color=brightgreen) \n
+![Visitors](https://komarev.com/ghpvc/?username=vyankateshpotdar&style=for-the-badge&color=brightgreen) 
+
+
+
 Welcome to the **BITCOIN-500** repository! 🚀  
 
 ![Bitcoin](https://img.shields.io/badge/Bitcoin-Project-orange?logo=bitcoin)
