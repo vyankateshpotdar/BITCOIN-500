@@ -1,4 +1,4 @@
-# ₿ BITCOIN-500
+# ₿ITCOIN-500
 ![Visitors](https://komarev.com/ghpvc/?username=vyankateshpotdar&style=for-the-badge&color=brightgreen) 
 
 
