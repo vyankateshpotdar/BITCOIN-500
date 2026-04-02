@@ -4,6 +4,7 @@ Welcome to the **BITCOIN-500** repository! 🚀
 
 ![Bitcoin](https://img.shields.io/badge/Bitcoin-Project-orange?logo=bitcoin)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
+![Visitors](https://komarev.com/ghpvc/?username=vyankateshpotdar&style=for-the-badge&color=brightgreen)
 ![PRs](https://img.shields.io/github/issues-pr/vyankateshpotdar/BITCOIN-500)
 ![Contributors](https://img.shields.io/github/contributors/vyankateshpotdar/BITCOIN-500)
 ![Stars](https://img.shields.io/github/stars/vyankateshpotdar/BITCOIN-500?style=social)
