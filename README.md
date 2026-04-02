@@ -1,0 +1,26 @@
+# BITCOIN-500
+
+Welcome to the **BITCOIN-500** repository! 🚀  
+
+## Overview  
+The BITCOIN-500 is a Bitcoin price alert bot designed to keep you informed about significant price movements in the Bitcoin market. This bot operates specifically on movements of ±$500, ensuring you get timely alerts without being overwhelmed by more minor fluctuations.
+
+## Features  
+- **Price Monitoring**: The bot continuously monitors the Bitcoin price and triggers alerts only when the price moves by $500 or more.
+- **Real-Time Alerts**: Get instant notifications through your preferred messaging platform whenever a significant price change occurs.
+- **Easy Setup**: The bot is designed with simplicity in mind, making it easy for anyone to set up and start receiving alerts.
+
+## Getting Started  
+1. **Clone the Repository**: `git clone https://github.com/vyankateshpotdar/BITCOIN-500.git`
+2. **Install Dependencies**: Run `npm install` to install the necessary packages.
+3. **Configure the Bot**: Edit the configuration file to set your alert preferences.
+4. **Run the Bot**: Start the bot using `node bot.js` and stay updated with Bitcoin price movements!
+
+## Contributing  
+Contributions are welcome! If you would like to contribute to the development of BITCOIN-500, please create a pull request. 
+
+## License  
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---  
+Stay tuned and never miss significant movements in Bitcoin's price again!
