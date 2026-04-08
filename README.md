@@ -14,6 +14,7 @@ Welcome to the **BITCOIN-500** repository! 🚀
 
 ## Overview  
 The BITCOIN-500 is a Bitcoin price alert bot designed to keep you informed about significant price movements in the Bitcoin market. This bot operates specifically on movements of ±$500, ensuring you get timely alerts without being overwhelmed by more minor fluctuations.
+![1764957223734](https://github.com/user-attachments/assets/d27f95ba-1254-45f9-8b1e-0725fc618ac0)
 
 ## Features  
 - **Price Monitoring**: The bot continuously monitors the Bitcoin price and triggers alerts only when the price moves by $500 or more.
