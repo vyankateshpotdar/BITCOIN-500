@@ -1,4 +1,5 @@
 # ₿ITCOIN-500
+<img width="1920" height="1080" alt="575270147-d27f95ba-1254-45f9-8b1e-0725fc618ac0" src="https://github.com/user-attachments/assets/3ed82335-e714-4f21-8152-ec0abc7aa7ab" />
 
 ![Bitcoin](https://img.shields.io/badge/Bitcoin-Project-orange?logo=bitcoin)
 ![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)
