@@ -21,9 +21,9 @@ import requests
 #   BINANCE_BASE_URL (default: https://api.binance.com)
 
 TELEGRAM_TOKEN = os.getenv("8268233910:AAHE8NNkI-_l8v7tFgoHkUVP2KzNPG3c5L4")
-CHAT_ID = os.getenv("5392399263", "@bitcoin500alerts")
+CHAT_ID = os.getenv("CHAT_ID", "@bitcoin500alerts")
 PORT = int(os.getenv("PORT", "8000"))
-CHECK_INTERVAL = float(os.getenv("CHECK_INTERVAL", "1.0"))
+CHECK_INTERVAL = float(os.getenv("CHECK_INTERVAL", "2.0"))
 PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "500"))
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://api.binance.com")
@@ -111,7 +111,6 @@ def _get_price(symbol: str) -> float:
 
     r = _http_session.get(url, params=params, timeout=10)
 
-    # Binance returns 4xx with a JSON body like {"code": -1121, "msg": "Invalid symbol."}
     if r.status_code != 200:
         try:
             body = r.json()
@@ -159,7 +158,7 @@ def start_health_server() -> None:
     global _httpd_ref
     logger.info("[HEALTH] Starting health server on port %s", PORT)
     httpd = HTTPServer(("0.0.0.0", PORT), Handler)
-    httpd.timeout = 1.0  # unblocks handle_request() periodically so _stop_event is checked
+    httpd.timeout = 1.0
     _httpd_ref = httpd
 
     while not _stop_event.is_set():
