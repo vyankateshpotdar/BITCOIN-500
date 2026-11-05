@@ -21,6 +21,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - [Setup & Installation](#setup--installation)
   - [Local Setup](#local-setup)
   - [Docker Setup](#docker-setup)
+  - [Koyeb Hosting](#koyeb-hosting)
 - [Environment Variables](#environment-variables)
 - [Usage](#usage)
 - [Project Structure](#project-structure)
@@ -37,9 +38,10 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 
 ## Features
 
-- **Real-Time Price Monitoring** — Continuously polls Binance for the latest BTC/USDT price.
+- **Real-Time Price Monitoring** — Receives Binance trade updates over a persistent WebSocket connection.
 - **Smart Threshold Alerts** — Only triggers when the price moves ±$500, reducing alert fatigue.
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
+- **Chart Snapshots** — Includes a recent 15-minute candlestick chart with startup and threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
 - **Configurable via Environment Variables** — No code changes needed to customize behavior.
@@ -50,9 +52,9 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 
 ## How It Works
 
-1. On startup, the bot fetches the current BTC price from Binance and stores it as the **reference price**.
-2. A Telegram message is sent confirming the starting price.
-3. The bot then polls Binance continuously (default every 0.1 seconds).
+1. On startup, the bot receives the latest BTC trade from Binance and stores it as the **reference price**.
+2. A Telegram message is sent with the latest price and UTC timestamp as soon as the bot starts.
+3. The bot then listens to Binance's live trade stream and reconnects automatically after connection errors.
 4. When the price differs from the reference by **$500 or more**, a Telegram alert is sent showing the new price, the change amount, and direction (↑ or ↓).
 5. The reference price is updated to the new price, and monitoring continues.
 
@@ -130,6 +132,16 @@ docker run -d \
   bitcoin-500
 ```
 
+### Koyeb Hosting
+
+1. Push the latest project files to GitHub, then create a service from that repository in Koyeb.
+2. Choose **Dockerfile** as the build method and keep the Dockerfile path as `Dockerfile`.
+3. For continuous 24/7 alerts, select a **Worker** service and a paid instance. Koyeb's Free instance does not support workers and free web services can scale to zero when they receive no traffic.
+4. Add `TELEGRAM_TOKEN` as a Koyeb Secret and reference it as the service environment variable. Add `CHAT_ID` with the channel ID as a regular environment variable (or secret).
+5. Leave the Docker command at its default; the image runs `python code.py` and reconnects to Binance automatically.
+
+The bot must already be an administrator in the Telegram channel with permission to post. If you choose a **Web Service** instead of a Worker, expose port `8000` as HTTP and use `/health` as the health-check path. This is suitable for a test deployment, but a Free instance can sleep after an hour without inbound traffic, so it is not reliable for uninterrupted alerts.
+
 ---
 
 ## Environment Variables
@@ -137,9 +149,8 @@ docker run -d \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `TELEGRAM_TOKEN` | ✅ Yes | — | Your Telegram bot token from BotFather |
-| `CHAT_ID` | No | `@bitcoin500alerts` | Telegram chat ID or channel username |
+| `CHAT_ID` | No | `-1003175403499` | Telegram chat ID or channel username |
 | `PORT` | No | `8000` | Port for the health check HTTP server |
-| `CHECK_INTERVAL` | No | `0.1` | Price polling interval in seconds |
 | `PRICE_THRESHOLD` | No | `500` | USD threshold to trigger an alert |
 | `SYMBOL` | No | `BTCUSDT` | Binance trading pair symbol |
 | `BINANCE_API_KEY` | No | — | Binance API key (optional for public data) |

@@ -1,13 +1,21 @@
 import os
 import sys
+import json
 import time
 import signal
 import threading
 import logging
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
 import requests
+import websocket
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+from matplotlib.ticker import FuncFormatter
 
 # ===== CONFIG (from environment) =====
 # Required:
@@ -15,15 +23,13 @@ import requests
 # Optional:
 #   CHAT_ID (default: @bitcoin500alerts)
 #   PORT (default: 8000)
-#   CHECK_INTERVAL (default: 2.0)
 #   PRICE_THRESHOLD (default: 500)
 #   SYMBOL (default: BTCUSDT)
 #   BINANCE_BASE_URL (default: https://api.binance.com)
 
-TELEGRAM_TOKEN = os.getenv("8268233910:AAHE8NNkI-_l8v7tFgoHkUVP2KzNPG3c5L4")
-CHAT_ID = os.getenv("CHAT_ID", "@bitcoin500alerts")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+CHAT_ID = os.getenv("CHAT_ID", "-1003175403499")
 PORT = int(os.getenv("PORT", "8000"))
-CHECK_INTERVAL = float(os.getenv("CHECK_INTERVAL", "2.0"))
 PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "500"))
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://api.binance.com")
@@ -40,18 +46,6 @@ if not TELEGRAM_TOKEN:
     logger.critical("TELEGRAM_TOKEN is required but not set. Exiting.")
     sys.exit(1)
 
-if CHECK_INTERVAL <= 0:
-    logger.critical("CHECK_INTERVAL must be > 0, got %s. Exiting.", CHECK_INTERVAL)
-    sys.exit(1)
-
-if CHECK_INTERVAL < 1.0:
-    logger.warning(
-        "CHECK_INTERVAL=%s is aggressive for REST polling and may hit Binance "
-        "rate limits (weight-based, ~1200/min per IP on /api/v3/ticker/price). "
-        "Consider >= 1.0s, or use the websocket stream instead.",
-        CHECK_INTERVAL,
-    )
-
 if PRICE_THRESHOLD <= 0:
     logger.critical("PRICE_THRESHOLD must be > 0, got %s. Exiting.", PRICE_THRESHOLD)
     sys.exit(1)
@@ -61,7 +55,7 @@ _http_session = requests.Session()
 
 # ===== STOP CONTROL =====
 _stop_event = threading.Event()
-_httpd_ref: HTTPServer | None = None
+_httpd_ref = None
 
 
 def _escape_markdown(text: str) -> str:
@@ -71,11 +65,11 @@ def _escape_markdown(text: str) -> str:
     return text
 
 
-def send_telegram(text: str) -> None:
+def send_telegram(text: str) -> bool:
     """Send a Telegram message to the configured chat."""
     if not TELEGRAM_TOKEN:
         logger.warning("TELEGRAM_TOKEN is not set; skipping Telegram send")
-        return
+        return False
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {
@@ -87,43 +81,146 @@ def send_telegram(text: str) -> None:
 
     try:
         r = _http_session.post(url, json=payload, timeout=10)
-        if r.status_code != 200:
-            logger.warning("Telegram send failed: status=%s body=%s", r.status_code, r.text)
+        try:
+            result = r.json()
+        except ValueError:
+            result = {}
+
+        if r.status_code != 200 or not result.get("ok"):
+            logger.warning(
+                "Telegram send failed: http_status=%s description=%s body=%s",
+                r.status_code,
+                result.get("description", "Telegram returned no success confirmation"),
+                r.text[:1000],
+            )
+            return False
         else:
-            logger.info("Telegram send ok")
+            logger.info(
+                "Telegram accepted message for %s (message_id=%s)",
+                CHAT_ID,
+                result.get("result", {}).get("message_id"),
+            )
+            return True
     except requests.RequestException as e:
         logger.exception("Telegram request error: %s", e)
+        return False
+
+
+def _get_chart_candles(symbol: str, limit: int = 48):
+    """Fetch recent 15-minute Binance candles for the alert chart."""
+    url = f"{BINANCE_BASE_URL}/api/v3/klines"
+    response = _http_session.get(
+        url,
+        params={"symbol": symbol, "interval": "15m", "limit": limit},
+        timeout=10,
+    )
+    if response.status_code != 200:
+        raise BinancePublicAPIError(f"Klines HTTP {response.status_code}: {response.text[:500]}")
+    candles = response.json()
+    if not isinstance(candles, list) or not candles:
+        raise BinancePublicAPIError(f"Unexpected kline response: {candles}")
+    return candles
+
+
+def _create_chart(symbol: str, current_price: float) -> bytes:
+    """Render a clean dark candlestick snapshot and return PNG bytes."""
+    candles = _get_chart_candles(symbol)
+    times = [datetime.fromtimestamp(candle[0] / 1000, tz=timezone.utc) for candle in candles]
+    opens = [float(candle[1]) for candle in candles]
+    highs = [float(candle[2]) for candle in candles]
+    lows = [float(candle[3]) for candle in candles]
+    closes = [float(candle[4]) for candle in candles]
+    volumes = [float(candle[5]) for candle in candles]
+
+    fig, (price_ax, volume_ax) = plt.subplots(
+        2, 1, figsize=(10, 5.6), dpi=160, sharex=True,
+        gridspec_kw={"height_ratios": [4, 1], "hspace": 0.06},
+    )
+    background = "#101820"
+    fig.patch.set_facecolor(background)
+    for axis in (price_ax, volume_ax):
+        axis.set_facecolor(background)
+        axis.grid(True, color="#263440", linewidth=0.65, alpha=0.8)
+        axis.tick_params(colors="#91a0ad", labelsize=8, length=0, pad=7)
+        for spine in axis.spines.values():
+            spine.set_visible(False)
+
+    x_values = mdates.date2num(times)
+    candle_width = (x_values[1] - x_values[0]) * 0.62 if len(x_values) > 1 else 0.008
+    for x, opening, high, low, close, volume in zip(
+        x_values, opens, highs, lows, closes, volumes
+    ):
+        color = "#36c98f" if close >= opening else "#ff6474"
+        price_ax.vlines(x, low, high, color=color, linewidth=1.0, alpha=0.95)
+        body_bottom = min(opening, close)
+        body_height = max(abs(close - opening), current_price * 0.000025)
+        price_ax.add_patch(Rectangle(
+            (x - candle_width / 2, body_bottom), candle_width, body_height,
+            facecolor=color, edgecolor=color, linewidth=0.5,
+        ))
+        volume_ax.bar(x, volume, width=candle_width, color=color, alpha=0.65, linewidth=0)
+
+    price_ax.axhline(current_price, color="#65b9ff", linewidth=0.9, alpha=0.8)
+    price_ax.set_xlim(x_values[0] - candle_width, x_values[-1] + candle_width * 4)
+    price_ax.set_ylim(min(lows) * 0.999, max(highs) * 1.001)
+    price_ax.yaxis.tick_right()
+    price_ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"${value:,.0f}"))
+    volume_ax.yaxis.tick_right()
+    volume_ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1000:.0f}k"))
+    volume_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=timezone.utc))
+    volume_ax.set_xlabel("UTC  ·  15 minute candles  ·  last 12 hours", color="#91a0ad", fontsize=8, labelpad=8)
+    fig.suptitle(f"{symbol}  ·  Binance Spot", x=0.08, ha="left", color="#f2f5f7", fontsize=14, fontweight="semibold")
+    price_ax.set_title(f"LIVE PRICE   ${current_price:,.2f}", loc="left", color="#65b9ff", fontsize=10, pad=10)
+    fig.subplots_adjust(left=0.08, right=0.94, top=0.88, bottom=0.12)
+
+    from io import BytesIO
+    image = BytesIO()
+    fig.savefig(image, format="png", facecolor=background, bbox_inches="tight")
+    plt.close(fig)
+    return image.getvalue()
+
+
+def send_telegram_chart(caption: str, price: float) -> bool:
+    """Send a chart photo with a caption; return False so callers can fall back to text."""
+    try:
+        chart = _create_chart(SYMBOL, price)
+    except Exception as error:
+        logger.warning("Chart generation failed; sending text only: %s", error)
+        return False
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
+    try:
+        response = _http_session.post(
+            url,
+            data={"chat_id": CHAT_ID, "caption": caption, "parse_mode": "Markdown"},
+            files={"photo": ("bitcoin-price.png", chart, "image/png")},
+            timeout=30,
+        )
+        try:
+            result = response.json()
+        except ValueError:
+            result = {}
+        if response.status_code != 200 or not result.get("ok"):
+            logger.warning(
+                "Telegram chart send failed: http_status=%s description=%s",
+                response.status_code,
+                result.get("description", response.text[:500]),
+            )
+            return False
+        logger.info(
+            "Telegram accepted chart for %s (message_id=%s)",
+            CHAT_ID,
+            result.get("result", {}).get("message_id"),
+        )
+        return True
+    except requests.RequestException as error:
+        logger.exception("Telegram chart request error: %s", error)
+        return False
 
 
 class BinancePublicAPIError(Exception):
     """Raised when Binance's public REST API returns an error payload."""
     pass
-
-
-def _get_price(symbol: str) -> float:
-    """
-    Fetch the latest price using Binance's PUBLIC ticker endpoint.
-    No API key/secret required — this is a public market-data endpoint.
-    Docs: https://api.binance.com/api/v3/ticker/price
-    """
-    url = f"{BINANCE_BASE_URL}/api/v3/ticker/price"
-    params = {"symbol": symbol}
-
-    r = _http_session.get(url, params=params, timeout=10)
-
-    if r.status_code != 200:
-        try:
-            body = r.json()
-        except ValueError:
-            body = r.text
-        raise BinancePublicAPIError(f"HTTP {r.status_code}: {body}")
-
-    data = r.json()
-
-    if "price" not in data:
-        raise BinancePublicAPIError(f"Unexpected response shape: {data}")
-
-    return float(data["price"])
 
 
 # ===== HEALTH CHECK SERVER =====
@@ -169,73 +266,83 @@ def start_health_server() -> None:
 
 
 # ===== BTC LOOP =====
-def _get_price_with_retry(symbol: str, max_attempts: int | None = None) -> float:
-    """Fetch price, retrying with exponential backoff instead of crashing
-    on a transient failure at startup."""
-    attempt = 0
-    backoff = 1.0
-    while not _stop_event.is_set():
-        try:
-            return _get_price(symbol)
-        except (BinancePublicAPIError, requests.RequestException) as e:
-            logger.error("[BINANCE API ERROR] %s", e)
-
-        attempt += 1
-        if max_attempts is not None and attempt >= max_attempts:
-            raise RuntimeError(f"Failed to fetch price after {attempt} attempts")
-
-        _stop_event.wait(min(30.0, backoff))
-        backoff = min(30.0, backoff * 2.0)
-
-    raise RuntimeError("Stopped during startup price fetch")
-
-
 def btc_loop() -> None:
     logger.info(
-        "[BOT] Price loop starting (symbol=%s threshold=%s interval=%s)",
-        SYMBOL, PRICE_THRESHOLD, CHECK_INTERVAL,
+        "[BOT] Trade stream starting (symbol=%s threshold=%s)",
+        SYMBOL, PRICE_THRESHOLD,
     )
-
-    try:
-        start_price = _get_price_with_retry(SYMBOL)
-    except RuntimeError as e:
-        logger.critical("[STARTUP FAILURE] %s", e)
-        return
-
-    logger.info("[START PRICE] %s", start_price)
-    send_telegram(f"{SYMBOL} = `{start_price}`")
-
+    logger.info("[BOT] Telegram destination: %s", CHAT_ID)
+    stream_url = f"wss://stream.binance.com:9443/ws/{SYMBOL.lower()}@trade"
+    reference_price = None
     backoff = 1.0
+
     while not _stop_event.is_set():
+        connection = None
         try:
-            price = _get_price(SYMBOL)
-            diff = price - start_price
-            logger.info("[PRICE] %s Δ %s", price, diff)
-
-            if abs(diff) >= PRICE_THRESHOLD:
-                arrow = "↑" if diff > 0 else "↓"
-                sign = "+" if diff > 0 else ""
-                symbol_safe = _escape_markdown(SYMBOL)
-
-                msg = (
-                    f"*{arrow} {symbol_safe} = ${price:,.2f}*\n"
-                    f"*Change = {sign}{diff:,.2f} USD*\n"
-                    f"_Time: {datetime.now(timezone.utc).isoformat()}Z_"
-                )
-
-                send_telegram(msg)
-                start_price = price
-
+            logger.info("[BINANCE] Connecting to live trade stream")
+            connection = websocket.create_connection(stream_url, timeout=10)
+            connection.settimeout(1)
+            logger.info("[BINANCE] Live trade stream connected")
             backoff = 1.0
-            _stop_event.wait(CHECK_INTERVAL)
 
-        except (BinancePublicAPIError, requests.RequestException) as e:
-            logger.error("[BINANCE API ERROR] %s", e)
-            _stop_event.wait(min(30.0, backoff))
-            backoff = min(30.0, backoff * 2.0)
-        except Exception as e:
-            logger.exception("[LOOP ERROR] %s", e)
-            _stop_event.wait(min(30.0, backoff))
+            while not _stop_event.is_set():
+                try:
+                    raw_event = connection.recv()
+                except websocket.WebSocketTimeoutException:
+                    continue
+                if not raw_event:
+                    raise websocket.WebSocketConnectionClosedException("Empty stream response")
+
+                event = json.loads(raw_event)
+                price = float(event["p"])
+                if reference_price is None:
+                    reference_price = price
+                    logger.info("[START PRICE] %s", price)
+                    startup_message = (
+                        f"₿  *{_escape_markdown(SYMBOL)}  ·  Bitcoin price*\n\n"
+                        f"💵  *${price:,.2f}*\n\n"
+                        f"🕒  Updated {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC"
+                    )
+                    for attempt in range(1, 4):
+                        delivered = send_telegram_chart(startup_message, price)
+                        if not delivered:
+                            delivered = send_telegram(startup_message)
+                        if delivered:
+                            break
+                        if attempt < 3:
+                            delay = attempt * 2
+                            logger.warning("[STARTUP MESSAGE] Retry %s/3 in %s seconds", attempt + 1, delay)
+                            _stop_event.wait(delay)
+                    else:
+                        logger.error("[STARTUP MESSAGE] Could not deliver startup price after 3 attempts")
+                    continue
+
+                diff = price - reference_price
+                if abs(diff) >= PRICE_THRESHOLD:
+                    arrow = "↑" if diff > 0 else "↓"
+                    sign = "+" if diff > 0 else ""
+                    symbol_safe = _escape_markdown(SYMBOL)
+                    msg = (
+                        f"{arrow}  *{symbol_safe}  ·  Price alert*\n\n"
+                        f"💵  *${price:,.2f}*\n"
+                        f"📊  Change: *{sign}${diff:,.2f}*\n\n"
+                        f"🕒  {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC"
+                    )
+                    if not send_telegram_chart(msg, price):
+                        send_telegram(msg)
+                    reference_price = price
+
+        except (websocket.WebSocketException, requests.RequestException, OSError, ValueError, KeyError) as e:
+            logger.warning("[BINANCE STREAM ERROR] %s", e)
+        finally:
+            if connection is not None:
+                try:
+                    connection.close()
+                except Exception:
+                    pass
+        if not _stop_event.is_set():
+            logger.info("[BINANCE] Reconnecting in %.1f seconds", backoff)
+            _stop_event.wait(backoff)
             backoff = min(30.0, backoff * 2.0)
 
 

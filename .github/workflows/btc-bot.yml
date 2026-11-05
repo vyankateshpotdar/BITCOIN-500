@@ -2,13 +2,11 @@ name: Run BTC Bot
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"
 
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
 
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +21,5 @@ jobs:
 
       - run: python code.py
         env:
-          CI_ENVIRONMENT: "true"
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
