@@ -25,14 +25,14 @@ from matplotlib.ticker import FuncFormatter
 #   PORT (default: 8000)
 #   PRICE_THRESHOLD (default: 500)
 #   SYMBOL (default: BTCUSDT)
-#   BINANCE_BASE_URL (default: https://api.binance.com)
+#   BINANCE_BASE_URL (default: https://data-api.binance.vision)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID", "-1003175403499")
 PORT = int(os.getenv("PORT", "8000"))
 PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "500"))
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
-BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://api.binance.com")
+BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://data-api.binance.vision")
 
 # ===== LOGGING =====
 logging.basicConfig(
@@ -272,7 +272,7 @@ def btc_loop() -> None:
         SYMBOL, PRICE_THRESHOLD,
     )
     logger.info("[BOT] Telegram destination: %s", CHAT_ID)
-    stream_url = f"wss://stream.binance.com:9443/ws/{SYMBOL.lower()}@trade"
+    stream_url = f"wss://data-stream.binance.vision:443/ws/{SYMBOL.lower()}@trade"
     reference_price = None
     backoff = 1.0
 
