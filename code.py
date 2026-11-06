@@ -166,6 +166,14 @@ def _create_chart(symbol: str, current_price: float) -> bytes:
         ))
         volume_ax.bar(x, volume, width=candle_width, color=color, alpha=0.65, linewidth=0)
 
+    price_ax.text(
+        0.5, 0.5, "©BITCOIN 500",
+        transform=price_ax.transAxes,
+        ha="center", va="center",
+        color="#29343d", alpha=0.82,
+        fontsize=24, fontweight="bold", zorder=0.5,
+    )
+
     price_ax.axhline(current_price, color="#65b9ff", linewidth=0.9, alpha=0.8)
     price_ax.set_xlim(x_values[0] - candle_width, x_values[-1] + candle_width * 4)
     price_ax.set_ylim(min(lows) * 0.999, max(highs) * 1.001)

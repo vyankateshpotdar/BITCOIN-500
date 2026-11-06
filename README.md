@@ -41,7 +41,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - **Real-Time Price Monitoring** — Receives Binance trade updates over a persistent WebSocket connection.
 - **Smart Threshold Alerts** — Only triggers when the price moves ±$500, reducing alert fatigue.
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
-- **Chart Snapshots** — Includes a recent 15-minute candlestick chart with startup and threshold alerts.
+- **Branded Chart Snapshots** — Sends a 12-hour candlestick chart with volume, live price, and a ©BITCOIN 500 watermark at startup and on threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
 - **Configurable via Environment Variables** — No code changes needed to customize behavior.
