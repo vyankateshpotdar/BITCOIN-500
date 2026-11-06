@@ -167,7 +167,7 @@ def _create_chart(symbol: str, current_price: float) -> bytes:
         volume_ax.bar(x, volume, width=candle_width, color=color, alpha=0.65, linewidth=0)
 
     price_ax.text(
-        0.5, 0.5, "©BITCOIN 500",
+        0.5, 0.5, "@bitcoin500alerts",
         transform=price_ax.transAxes,
         ha="center", va="center",
         color="#29343d", alpha=0.82,
