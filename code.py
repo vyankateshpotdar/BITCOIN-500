@@ -24,6 +24,7 @@ from matplotlib.ticker import FuncFormatter
 #   CHAT_ID (default: @bitcoin500alerts)
 #   PORT (default: 8000)
 #   PRICE_THRESHOLD (default: 500)
+#   PRICE_LOG_INTERVAL (default: 10)
 #   SYMBOL (default: BTCUSDT)
 #   BINANCE_BASE_URL (default: https://data-api.binance.vision)
 
@@ -31,6 +32,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID", "-1003175403499")
 PORT = int(os.getenv("PORT", "8000"))
 PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "500"))
+PRICE_LOG_INTERVAL = float(os.getenv("PRICE_LOG_INTERVAL", "10"))
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://data-api.binance.vision")
 
@@ -48,6 +50,10 @@ if not TELEGRAM_TOKEN:
 
 if PRICE_THRESHOLD <= 0:
     logger.critical("PRICE_THRESHOLD must be > 0, got %s. Exiting.", PRICE_THRESHOLD)
+    sys.exit(1)
+
+if PRICE_LOG_INTERVAL <= 0:
+    logger.critical("PRICE_LOG_INTERVAL must be > 0, got %s. Exiting.", PRICE_LOG_INTERVAL)
     sys.exit(1)
 
 # ===== HTTP SESSION (connection reuse for both Binance + Telegram) =====
@@ -284,6 +290,7 @@ def btc_loop() -> None:
             connection.settimeout(1)
             logger.info("[BINANCE] Live trade stream connected")
             backoff = 1.0
+            last_price_log = 0.0
 
             while not _stop_event.is_set():
                 try:
@@ -318,6 +325,14 @@ def btc_loop() -> None:
                     continue
 
                 diff = price - reference_price
+                now = time.monotonic()
+                if now - last_price_log >= PRICE_LOG_INTERVAL:
+                    logger.info(
+                        "[PRICE] %s = $%s (change from alert reference: %+.2f USD)",
+                        SYMBOL, f"{price:,.2f}", diff,
+                    )
+                    last_price_log = now
+
                 if abs(diff) >= PRICE_THRESHOLD:
                     arrow = "↑" if diff > 0 else "↓"
                     sign = "+" if diff > 0 else ""
@@ -328,6 +343,7 @@ def btc_loop() -> None:
                         f"📊  Change: *{sign}${diff:,.2f}*\n\n"
                         f"🕒  {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC"
                     )
+                    logger.info("[ALERT] Threshold crossed: %s %+.2f USD", SYMBOL, diff)
                     if not send_telegram_chart(msg, price):
                         send_telegram(msg)
                     reference_price = price

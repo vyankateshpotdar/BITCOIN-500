@@ -152,6 +152,7 @@ The bot must already be an administrator in the Telegram channel with permission
 | `CHAT_ID` | No | `-1003175403499` | Telegram chat ID or channel username |
 | `PORT` | No | `8000` | Port for the health check HTTP server |
 | `PRICE_THRESHOLD` | No | `500` | USD threshold to trigger an alert |
+| `PRICE_LOG_INTERVAL` | No | `10` | Seconds between live price log entries |
 | `SYMBOL` | No | `BTCUSDT` | Binance trading pair symbol |
 | `BINANCE_API_KEY` | No | — | Binance API key (optional for public data) |
 | `BINANCE_API_SECRET` | No | — | Binance API secret |
@@ -164,7 +165,7 @@ The bot must already be an administrator in the Telegram channel with permission
 Once running, the bot will:
 
 - Send a startup message to Telegram with the initial BTC price.
-- Silently monitor in the background.
+- Log the latest BTC price every 10 seconds while the stream is connected.
 - Send alerts like this when the threshold is crossed:
 
 ```
