@@ -290,21 +290,23 @@ def start_health_server() -> None:
 # ===== BTC LOOP =====
 def btc_loop() -> None:
     logger.info(
-        "[BOT] Trade stream starting (symbol=%s threshold=%s)",
+        "[BOT] Mini-ticker stream starting (symbol=%s threshold=%s)",
         SYMBOL, PRICE_THRESHOLD,
     )
     logger.info("[BOT] Telegram destination: %s", CHAT_ID)
-    stream_url = f"wss://data-stream.binance.vision:443/ws/{SYMBOL.lower()}@trade"
+    # The raw @trade stream can emit many messages per second. The mini ticker
+    # updates once per second and is sufficient for threshold price alerts.
+    stream_url = f"wss://data-stream.binance.vision:443/ws/{SYMBOL.lower()}@miniTicker"
     reference_price = None
     backoff = 1.0
 
     while not _stop_event.is_set():
         connection = None
         try:
-            logger.info("[BINANCE] Connecting to live trade stream")
+            logger.info("[BINANCE] Connecting to 1-second mini-ticker stream")
             connection = websocket.create_connection(stream_url, timeout=10)
             connection.settimeout(1)
-            logger.info("[BINANCE] Live trade stream connected")
+            logger.info("[BINANCE] Mini-ticker stream connected")
             backoff = 1.0
             last_price_log = 0.0
 
@@ -317,7 +319,7 @@ def btc_loop() -> None:
                     raise websocket.WebSocketConnectionClosedException("Empty stream response")
 
                 event = json.loads(raw_event)
-                price = float(event["p"])
+                price = float(event["c"])
                 if reference_price is None:
                     reference_price = price
                     logger.info("[START PRICE] %s", price)
