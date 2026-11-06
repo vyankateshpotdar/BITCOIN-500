@@ -180,7 +180,15 @@ def _create_chart(symbol: str, current_price: float) -> bytes:
     price_ax.yaxis.tick_right()
     price_ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"${value:,.0f}"))
     volume_ax.yaxis.tick_right()
-    volume_ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value / 1000:.0f}k"))
+    volume_ax.yaxis.set_major_formatter(FuncFormatter(
+        lambda value, _: (
+            f"{value / 1000:.1f}k" if abs(value) >= 1000
+            else f"{value:.2f}" if abs(value) < 1
+            else f"{value:,.1f}"
+        )
+    ))
+    volume_ax.set_ylabel("BTC", rotation=0, color="#91a0ad", fontsize=8, labelpad=15)
+    volume_ax.yaxis.set_label_position("right")
     volume_ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M", tz=timezone.utc))
     volume_ax.set_xlabel("UTC  ·  15 minute candles  ·  last 12 hours", color="#91a0ad", fontsize=8, labelpad=8)
     fig.suptitle(f"{symbol}  ·  Binance Spot", x=0.08, ha="left", color="#f2f5f7", fontsize=14, fontweight="semibold")
