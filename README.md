@@ -135,7 +135,7 @@ docker run -d \
 ### Koyeb Hosting
 
 1. Push the latest project files to GitHub, then create a service from that repository in Koyeb.
-2. Choose **Dockerfile** as the build method and keep the Dockerfile path as `Dockerfile`.
+2. Choose **Dockerfile** as the build method and keep the Dockerfile path as `Dockerfile`. Buildpack is also supported: the root `requirements.txt` identifies the Python app, and `Procfile` sets its run command.
 3. For continuous 24/7 alerts, select a **Worker** service and a paid instance. Koyeb's Free instance does not support workers and free web services can scale to zero when they receive no traffic.
 4. Add `TELEGRAM_TOKEN` as a Koyeb Secret and reference it as the service environment variable. Add `CHAT_ID` with the channel ID as a regular environment variable (or secret).
 5. Leave the Docker command at its default; the image runs `python code.py` and reconnects to Binance automatically.
