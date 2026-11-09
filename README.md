@@ -43,6 +43,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
 - **Optional X Cross-posting** — Can post the same chart and alert details to X, with a Telegram channel link.
 - **Optional Blogger Cross-posting** — Publishes a search-friendly price update with the chart, alert move, timestamp, and Telegram link.
+- **Scheduled Market Reports** — Sends completed-period daily, weekly, and monthly BTCUSDT reports with historical charts, OHLC prices, net change, and BTC/USDT volume to Telegram and optionally Blogger.
 - **Branded Chart Snapshots** — Sends a 12-hour candlestick chart with volume, live price, and an @bitcoin500alerts watermark at startup and on threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
@@ -178,6 +179,7 @@ The bot publishes a Blogger post at startup and on each threshold alert with a d
 | `X_ACCESS_TOKEN` | No | — | X account user access token (store as a secret) |
 | `X_ACCESS_TOKEN_SECRET` | No | — | X account user access token secret (store as a secret) |
 | `BLOGGER_ENABLED` | No | `false` | Set to `true` to publish startup and threshold updates to Blogger |
+| `PERIODIC_REPORTS_ENABLED` | No | `true` | Set to `false` to disable the scheduled daily, weekly, and monthly reports (UTC) |
 | `BLOGGER_CLIENT_ID` | No | — | Google OAuth desktop app client ID (store as a secret) |
 | `BLOGGER_CLIENT_SECRET` | No | — | Google OAuth desktop app client secret (store as a secret) |
 | `BLOGGER_REFRESH_TOKEN` | No | — | Offline OAuth token for Blogger publishing (store as a secret) |
@@ -201,6 +203,8 @@ Once running, the bot will:
 Change = +502.30 USD
 Time: 2026-05-09T10:32:15Z
 ```
+
+Scheduled reports cover completed UTC periods: the previous day posts at 00:05, the previous Monday–Sunday week posts Monday at 00:10, and the previous calendar month posts on day 1 at 00:15. Each includes its own candlestick chart, open/high/low/close, net price and percentage change, BTC volume, and USDT quote volume. Reports go to Telegram and Blogger when Blogger publishing is enabled. The service must be running at those times; a sleeping or stopped Koyeb instance cannot run its schedule.
 
 You can check the bot's health at:
 
