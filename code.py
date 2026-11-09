@@ -187,7 +187,7 @@ def send_x_chart_async(text: str, chart: bytes) -> None:
     worker.start()
 
 
-def _send_blogger_post(title: str, html_content: str) -> bool:
+def _send_blogger_post(price: float, change: float = None, chart: bytes = None) -> bool:
     """Publish a price update to the configured Blogger blog."""
     if not BLOGGER_ENABLED:
         return False
@@ -195,6 +195,8 @@ def _send_blogger_post(title: str, html_content: str) -> bool:
         logger.warning("[BLOGGER] Skipping post because Blogger credentials are incomplete")
         return False
 
+    drive_file_id = None
+    access_token = None
     try:
         token_response = _http_session.post(
             "https://oauth2.googleapis.com/token",
@@ -214,53 +216,157 @@ def _send_blogger_post(title: str, html_content: str) -> bool:
             logger.warning("[BLOGGER] OAuth token refresh returned no access token")
             return False
 
+        chart_url = None
+        if chart:
+            uploaded = _upload_blogger_chart(access_token, chart)
+            if uploaded:
+                chart_url, drive_file_id = uploaded
+        title, html_content = _blogger_content(price, change, chart_url)
+
         response = _http_session.post(
             f"https://www.googleapis.com/blogger/v3/blogs/{BLOGGER_BLOG_ID}/posts/",
             params={"isDraft": "false"},
             headers={"Authorization": f"Bearer {access_token}"},
-            json={"kind": "blogger#post", "title": title, "content": html_content},
+            json={
+                "kind": "blogger#post",
+                "title": title,
+                "content": html_content,
+                "labels": ["Bitcoin", "BTCUSDT", "Bitcoin Price", "Binance Spot", "Crypto Market Update"],
+            },
             timeout=20,
         )
         if response.status_code != 200:
             logger.warning("[BLOGGER] Post failed: HTTP %s body=%s", response.status_code, response.text[:500])
+            if drive_file_id:
+                _delete_blogger_chart(access_token, drive_file_id)
             return False
         post = response.json()
         logger.info("[BLOGGER] Post published (post_id=%s url=%s)", post.get("id"), post.get("url"))
         return True
     except (requests.RequestException, ValueError) as error:
+        if drive_file_id and access_token:
+            _delete_blogger_chart(access_token, drive_file_id)
         logger.warning("[BLOGGER] Post failed: %s", error)
         return False
 
 
-def send_blogger_post_async(title: str, html_content: str) -> None:
+def send_blogger_post_async(price: float, change: float = None, chart: bytes = None) -> None:
     """Publish off-thread so Google API latency cannot interrupt price monitoring."""
     if not BLOGGER_ENABLED:
         return
     worker = threading.Thread(
         target=_send_blogger_post,
-        args=(title, html_content),
+        args=(price, change, chart),
         name="blogger-crosspost",
         daemon=True,
     )
     worker.start()
 
 
-def _blogger_content(price: float, change: float = None):
-    """Build a compact public Blogger post from a live price update."""
-    timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M:%S UTC")
+def _upload_blogger_chart(access_token: str, chart: bytes):
+    """Upload a chart to Drive and make only that chart publicly viewable."""
+    boundary = f"bitcoin500-{time.time_ns()}"
+    metadata = json.dumps({
+        "name": f"bitcoin500-btcusdt-{int(time.time())}.png",
+        "mimeType": "image/png",
+    }).encode("utf-8")
+    body = (
+        f"--{boundary}\r\n".encode()
+        + b"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+        + metadata
+        + f"\r\n--{boundary}\r\n".encode()
+        + b"Content-Type: image/png\r\n\r\n"
+        + chart
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": f"multipart/related; boundary={boundary}",
+    }
+    upload = _http_session.post(
+        "https://www.googleapis.com/upload/drive/v3/files",
+        params={"uploadType": "multipart", "fields": "id"},
+        headers=headers,
+        data=body,
+        timeout=30,
+    )
+    if upload.status_code not in (200, 201):
+        logger.warning("[BLOGGER] Chart upload to Drive failed: HTTP %s", upload.status_code)
+        return None
+
+    file_id = upload.json().get("id")
+    if not file_id:
+        logger.warning("[BLOGGER] Drive upload returned no file ID")
+        return None
+
+    permission = _http_session.post(
+        f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions",
+        headers={**headers, "Content-Type": "application/json"},
+        json={"type": "anyone", "role": "reader"},
+        params={"fields": "id"},
+        timeout=15,
+    )
+    if permission.status_code not in (200, 201):
+        logger.warning("[BLOGGER] Could not make chart publicly viewable: HTTP %s", permission.status_code)
+        _delete_blogger_chart(access_token, file_id)
+        return None
+
+    return f"https://drive.google.com/uc?export=view&id={file_id}", file_id
+
+
+def _delete_blogger_chart(access_token: str, file_id: str) -> None:
+    """Best-effort cleanup for a Drive image that wasn't embedded in a post."""
+    try:
+        _http_session.delete(
+            f"https://www.googleapis.com/drive/v3/files/{file_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=15,
+        )
+    except requests.RequestException as error:
+        logger.warning("[BLOGGER] Could not clean up unused chart file: %s", error)
+
+
+def _blogger_content(price: float, change: float = None, chart_url: str = None):
+    """Build a useful, factual, search-friendly BTCUSDT price post."""
+    updated = datetime.now(timezone.utc)
+    timestamp = updated.strftime("%d %b %Y, %H:%M:%S UTC")
     safe_symbol = html.escape(SYMBOL)
-    title = f"BITCOIN 500 | {safe_symbol} ${price:,.2f}"
+    safe_time = html.escape(updated.isoformat(timespec="seconds"))
+    title = f"{safe_symbol} Bitcoin Price: ${price:,.2f} | BITCOIN 500"
     direction = "" if change is None else ("Up" if change > 0 else "Down")
     change_html = (
         "" if change is None else
-        f"<p><strong>Move:</strong> {direction} ${abs(change):,.2f} from the last alert reference.</p>"
+        f"<p><strong>Price move:</strong> BTCUSDT moved {direction.lower()} ${abs(change):,.2f} "
+        "from BITCOIN 500's previous alert reference. This is a price change, not a trading signal.</p>"
     )
+    image_html = ""
+    if chart_url:
+        safe_chart_url = html.escape(chart_url, quote=True)
+        alt = html.escape(
+            f"BTCUSDT Bitcoin price chart with 15-minute Binance Spot candles and volume, "
+            f"covering the last 12 hours. Latest price ${price:,.2f}. BITCOIN 500.",
+            quote=True,
+        )
+        image_html = (
+            f'<figure><img src="{safe_chart_url}" alt="{alt}" '
+            'style="display:block;max-width:100%;height:auto;margin:16px auto;" />'
+            '<figcaption>BTCUSDT 15-minute candlestick chart with volume; last 12 hours, UTC.</figcaption></figure>'
+        )
     content = (
-        f"<h2>₿ {safe_symbol} live price: ${price:,.2f}</h2>"
+        f"<h2>Bitcoin (BTCUSDT) price update: ${price:,.2f}</h2>"
+        f"<p>The latest Binance Spot BTCUSDT price snapshot is <strong>${price:,.2f} USDT per BTC</strong>. "
+        "BTCUSDT is the Bitcoin-to-Tether (USDT) trading pair. The chart below shows 15-minute "
+        "candles and trading volume for the past 12 hours. Each candle summarizes that period's open, "
+        "high, low, and close; volume bars show BTC traded during each candle.</p>"
+        f"{image_html}"
         f"{change_html}"
-        f"<p><strong>Updated:</strong> {timestamp}</p>"
-        "<p>Follow <a href=\"https://t.me/bitcoin500alerts\">BITCOIN 500 on Telegram</a> "
-        "for threshold-based BTC price alerts.</p>"
+        f"<p><strong>Updated:</strong> <time datetime=\"{safe_time}\">{timestamp}</time></p>"
+        f"<h3>About BITCOIN 500 BTC price alerts</h3>"
+        f"<p>BITCOIN 500 tracks the {safe_symbol} market price and shares threshold-based Bitcoin price "
+        f"updates when price movement reaches the configured ${PRICE_THRESHOLD:,.0f} USD alert threshold. "
+        "These updates provide market context for readers who want to follow BTC price changes without "
+        "watching charts continuously.</p>"
+        "<p><a href=\"https://t.me/bitcoin500alerts\">Follow BITCOIN 500 on Telegram</a> for BTCUSDT price alerts.</p>"
         "<p><em>Market information only. Not financial advice or a trading recommendation.</em></p>"
     )
     return title, content
@@ -510,8 +616,7 @@ def btc_loop() -> None:
                     elif X_POSTS_ENABLED:
                         logger.warning("[X] Startup cross-post skipped because the chart couldn't be created")
                     if BLOGGER_ENABLED:
-                        blogger_title, blogger_content = _blogger_content(price)
-                        send_blogger_post_async(blogger_title, blogger_content)
+                        send_blogger_post_async(price, chart=chart)
                     continue
 
                 diff = price - reference_price
@@ -555,8 +660,7 @@ def btc_loop() -> None:
                     elif X_POSTS_ENABLED:
                         logger.warning("[X] Alert cross-post skipped because the chart couldn't be created")
                     if BLOGGER_ENABLED:
-                        blogger_title, blogger_content = _blogger_content(price, diff)
-                        send_blogger_post_async(blogger_title, blogger_content)
+                        send_blogger_post_async(price, diff, chart)
                     reference_price = price
 
         except (websocket.WebSocketException, requests.RequestException, OSError, ValueError, KeyError) as e:

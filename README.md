@@ -42,7 +42,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - **Smart Threshold Alerts** — Only triggers when the price moves ±$500, reducing alert fatigue.
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
 - **Optional X Cross-posting** — Can post the same chart and alert details to X, with a Telegram channel link.
-- **Optional Blogger Cross-posting** — Publishes a text post with the price, alert move, timestamp, and Telegram link through Google's Blogger API.
+- **Optional Blogger Cross-posting** — Publishes a search-friendly price update with the chart, alert move, timestamp, and Telegram link.
 - **Branded Chart Snapshots** — Sends a 12-hour candlestick chart with volume, live price, and an @bitcoin500alerts watermark at startup and on threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
@@ -148,12 +148,12 @@ To enable optional X cross-posting, create an X Developer app with user-context 
 
 To enable free Blogger cross-posting:
 
-1. In Google Cloud Console, create a project, enable the **Blogger API**, and configure the OAuth consent screen. Add your Google account as a test user if the app is in testing.
+1. In Google Cloud Console, create a project, enable the **Blogger API** and **Google Drive API**, and configure the OAuth consent screen. Add your Google account as a test user if the app is in testing.
 2. Create an OAuth client with type **Desktop app**, download its JSON, and save it in the project folder as `client_secret.json` (this file is ignored by Git).
 3. Install dependencies locally with `pip install -r requirements.txt`, then run `python setup_blogger.py`. Sign in with the Google account that owns the Blogger blog and choose the target blog. The script prints the four Blogger settings needed below.
 4. Add `BLOGGER_CLIENT_ID`, `BLOGGER_CLIENT_SECRET`, `BLOGGER_REFRESH_TOKEN`, and `BLOGGER_BLOG_ID` to Koyeb Secrets/environment variables, then set `BLOGGER_ENABLED=true` and redeploy.
 
-The bot publishes a text-only Blogger post at startup and on each threshold alert. Blogger's official `posts.insert` API accepts post text/HTML but has no media upload field, so chart images continue to go to Telegram and X only. For continuous publishing, set the OAuth consent screen publishing status to **In production**; Google says refresh tokens for external apps left in Testing expire after seven days.
+The bot publishes a Blogger post at startup and on each threshold alert with a descriptive BTCUSDT title, natural search terms, market context, update time, Telegram link, and chart image. Blogger's `posts.insert` method creates the post; the image is uploaded to Drive and embedded by URL because the Blogger API method does not provide an image upload field. The generated chart file is shared as publicly viewable so Blogger readers can load it. If Blogger was already connected before adding image support, rerun `setup_blogger.py` and replace `BLOGGER_REFRESH_TOKEN` so the token includes the new `drive.file` permission. If image upload or public sharing is unavailable, the bot still publishes the text update. For continuous publishing, set the OAuth consent screen publishing status to **In production**; Google says refresh tokens for external apps left in Testing expire after seven days.
 
 ---
 
