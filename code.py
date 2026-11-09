@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import html
 import time
 import signal
 import threading
@@ -43,6 +44,14 @@ X_API_SECRET = os.getenv("X_API_SECRET")
 X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
 X_ACCESS_TOKEN_SECRET = os.getenv("X_ACCESS_TOKEN_SECRET")
 X_CREDENTIALS_READY = all((X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET))
+BLOGGER_ENABLED = os.getenv("BLOGGER_ENABLED", "false").lower() in ("1", "true", "yes")
+BLOGGER_CLIENT_ID = os.getenv("BLOGGER_CLIENT_ID")
+BLOGGER_CLIENT_SECRET = os.getenv("BLOGGER_CLIENT_SECRET")
+BLOGGER_REFRESH_TOKEN = os.getenv("BLOGGER_REFRESH_TOKEN")
+BLOGGER_BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
+BLOGGER_CREDENTIALS_READY = all((
+    BLOGGER_CLIENT_ID, BLOGGER_CLIENT_SECRET, BLOGGER_REFRESH_TOKEN, BLOGGER_BLOG_ID
+))
 
 # ===== LOGGING =====
 logging.basicConfig(
@@ -69,6 +78,12 @@ if X_POSTS_ENABLED:
         logger.info("[X] Cross-posting is enabled")
     else:
         logger.warning("[X] Posting is enabled but one or more X API credentials are missing")
+
+if BLOGGER_ENABLED:
+    if BLOGGER_CREDENTIALS_READY:
+        logger.info("[BLOGGER] Cross-posting is enabled")
+    else:
+        logger.warning("[BLOGGER] Posting is enabled but Blogger credentials are incomplete")
 
 # ===== HTTP SESSION (connection reuse for both Binance + Telegram) =====
 _http_session = requests.Session()
@@ -170,6 +185,85 @@ def send_x_chart_async(text: str, chart: bytes) -> None:
         daemon=True,
     )
     worker.start()
+
+
+def _send_blogger_post(title: str, html_content: str) -> bool:
+    """Publish a price update to the configured Blogger blog."""
+    if not BLOGGER_ENABLED:
+        return False
+    if not BLOGGER_CREDENTIALS_READY:
+        logger.warning("[BLOGGER] Skipping post because Blogger credentials are incomplete")
+        return False
+
+    try:
+        token_response = _http_session.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": BLOGGER_CLIENT_ID,
+                "client_secret": BLOGGER_CLIENT_SECRET,
+                "refresh_token": BLOGGER_REFRESH_TOKEN,
+                "grant_type": "refresh_token",
+            },
+            timeout=15,
+        )
+        if token_response.status_code != 200:
+            logger.warning("[BLOGGER] OAuth token refresh failed: HTTP %s", token_response.status_code)
+            return False
+        access_token = token_response.json().get("access_token")
+        if not access_token:
+            logger.warning("[BLOGGER] OAuth token refresh returned no access token")
+            return False
+
+        response = _http_session.post(
+            f"https://www.googleapis.com/blogger/v3/blogs/{BLOGGER_BLOG_ID}/posts/",
+            params={"isDraft": "false"},
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"kind": "blogger#post", "title": title, "content": html_content},
+            timeout=20,
+        )
+        if response.status_code != 200:
+            logger.warning("[BLOGGER] Post failed: HTTP %s body=%s", response.status_code, response.text[:500])
+            return False
+        post = response.json()
+        logger.info("[BLOGGER] Post published (post_id=%s url=%s)", post.get("id"), post.get("url"))
+        return True
+    except (requests.RequestException, ValueError) as error:
+        logger.warning("[BLOGGER] Post failed: %s", error)
+        return False
+
+
+def send_blogger_post_async(title: str, html_content: str) -> None:
+    """Publish off-thread so Google API latency cannot interrupt price monitoring."""
+    if not BLOGGER_ENABLED:
+        return
+    worker = threading.Thread(
+        target=_send_blogger_post,
+        args=(title, html_content),
+        name="blogger-crosspost",
+        daemon=True,
+    )
+    worker.start()
+
+
+def _blogger_content(price: float, change: float = None):
+    """Build a compact public Blogger post from a live price update."""
+    timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M:%S UTC")
+    safe_symbol = html.escape(SYMBOL)
+    title = f"BITCOIN 500 | {safe_symbol} ${price:,.2f}"
+    direction = "" if change is None else ("Up" if change > 0 else "Down")
+    change_html = (
+        "" if change is None else
+        f"<p><strong>Move:</strong> {direction} ${abs(change):,.2f} from the last alert reference.</p>"
+    )
+    content = (
+        f"<h2>₿ {safe_symbol} live price: ${price:,.2f}</h2>"
+        f"{change_html}"
+        f"<p><strong>Updated:</strong> {timestamp}</p>"
+        "<p>Follow <a href=\"https://t.me/bitcoin500alerts\">BITCOIN 500 on Telegram</a> "
+        "for threshold-based BTC price alerts.</p>"
+        "<p><em>Market information only. Not financial advice or a trading recommendation.</em></p>"
+    )
+    return title, content
 
 
 def _get_chart_candles(symbol: str, limit: int = 48):
@@ -415,6 +509,9 @@ def btc_loop() -> None:
                         send_x_chart_async(x_startup_message, chart)
                     elif X_POSTS_ENABLED:
                         logger.warning("[X] Startup cross-post skipped because the chart couldn't be created")
+                    if BLOGGER_ENABLED:
+                        blogger_title, blogger_content = _blogger_content(price)
+                        send_blogger_post_async(blogger_title, blogger_content)
                     continue
 
                 diff = price - reference_price
@@ -457,6 +554,9 @@ def btc_loop() -> None:
                         send_x_chart_async(x_msg, chart)
                     elif X_POSTS_ENABLED:
                         logger.warning("[X] Alert cross-post skipped because the chart couldn't be created")
+                    if BLOGGER_ENABLED:
+                        blogger_title, blogger_content = _blogger_content(price, diff)
+                        send_blogger_post_async(blogger_title, blogger_content)
                     reference_price = price
 
         except (websocket.WebSocketException, requests.RequestException, OSError, ValueError, KeyError) as e:

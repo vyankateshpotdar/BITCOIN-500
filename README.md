@@ -42,6 +42,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - **Smart Threshold Alerts** — Only triggers when the price moves ±$500, reducing alert fatigue.
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
 - **Optional X Cross-posting** — Can post the same chart and alert details to X, with a Telegram channel link.
+- **Optional Blogger Cross-posting** — Publishes a text post with the price, alert move, timestamp, and Telegram link through Google's Blogger API.
 - **Branded Chart Snapshots** — Sends a 12-hour candlestick chart with volume, live price, and an @bitcoin500alerts watermark at startup and on threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
@@ -145,6 +146,15 @@ The bot must already be an administrator in the Telegram channel with permission
 
 To enable optional X cross-posting, create an X Developer app with user-context read/write access, add `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, and `X_ACCESS_TOKEN_SECRET` as Koyeb Secrets, then set `X_POSTS_ENABLED=true`. X posts include the same chart and alert details plus the Telegram channel link. Cross-posting is disabled by default; check current X Developer Console pricing before enabling it.
 
+To enable free Blogger cross-posting:
+
+1. In Google Cloud Console, create a project, enable the **Blogger API**, and configure the OAuth consent screen. Add your Google account as a test user if the app is in testing.
+2. Create an OAuth client with type **Desktop app**, download its JSON, and save it in the project folder as `client_secret.json` (this file is ignored by Git).
+3. Install dependencies locally with `pip install -r requirements.txt`, then run `python setup_blogger.py`. Sign in with the Google account that owns the Blogger blog and choose the target blog. The script prints the four Blogger settings needed below.
+4. Add `BLOGGER_CLIENT_ID`, `BLOGGER_CLIENT_SECRET`, `BLOGGER_REFRESH_TOKEN`, and `BLOGGER_BLOG_ID` to Koyeb Secrets/environment variables, then set `BLOGGER_ENABLED=true` and redeploy.
+
+The bot publishes a text-only Blogger post at startup and on each threshold alert. Blogger's official `posts.insert` API accepts post text/HTML but has no media upload field, so chart images continue to go to Telegram and X only. For continuous publishing, set the OAuth consent screen publishing status to **In production**; Google says refresh tokens for external apps left in Testing expire after seven days.
+
 ---
 
 ## Environment Variables
@@ -165,6 +175,11 @@ To enable optional X cross-posting, create an X Developer app with user-context 
 | `X_API_SECRET` | No | — | X Developer app API secret (store as a secret) |
 | `X_ACCESS_TOKEN` | No | — | X account user access token (store as a secret) |
 | `X_ACCESS_TOKEN_SECRET` | No | — | X account user access token secret (store as a secret) |
+| `BLOGGER_ENABLED` | No | `false` | Set to `true` to publish startup and threshold updates to Blogger |
+| `BLOGGER_CLIENT_ID` | No | — | Google OAuth desktop app client ID (store as a secret) |
+| `BLOGGER_CLIENT_SECRET` | No | — | Google OAuth desktop app client secret (store as a secret) |
+| `BLOGGER_REFRESH_TOKEN` | No | — | Offline OAuth token for Blogger publishing (store as a secret) |
+| `BLOGGER_BLOG_ID` | No | — | Numeric ID of the Blogger blog selected by `setup_blogger.py` |
 
 ---
 
