@@ -1,0 +1,128 @@
+{
+  "identity": {
+    "name": "BITCOIN 500",
+    "alternate_styling": "₿ITCOIN-500",
+    "existing_tagline": "Stay informed. Never miss a significant Bitcoin move again. ₿",
+    "one_sentence_description": "A Telegram-first bot monitoring Binance BTCUSDT and sending threshold alerts with charts and scheduled market summaries.",
+    "one_paragraph_description": "BITCOIN 500 listens to Binance's BTCUSDT mini-ticker stream and compares price with its current alert reference (default threshold $500). When that threshold is reached, it sends a chart and movement details to Telegram. It sends a startup snapshot and completed-period reports. Optional integrations cross-post to X and publish Blogger posts with Dropbox-hosted chart images. Posts include a market-information disclaimer.",
+    "platforms": [
+      {"name": "Telegram", "status": "Core bot/channel delivery", "sources": ["code.py", "README.md"]},
+      {"name": "X", "status": "Optional cross-posting", "sources": ["code.py", "README.md"]},
+      {"name": "Blogger", "status": "Optional publishing", "sources": ["code.py", "README.md"]},
+      {"name": "HTTP", "status": "Operational health/status routes only", "sources": ["code.py:824-863"]},
+      {"name": "Android/iOS/desktop app/customer API", "status": "Not present", "sources": ["code.py", "Dockerfile", "README.md"]}
+    ],
+    "tech_stack": ["Python 3.10 container", "Binance WebSocket and public REST", "Telegram Bot API", "Matplotlib", "Tweepy", "Google Blogger API/OAuth", "Dropbox API", "Docker"],
+    "sources": ["code.py", "requirements.txt", "Dockerfile", "README.md"]
+  },
+  "problem": {
+    "problem_solved": "README says Bitcoin followers can get significant price updates without watching charts continuously.",
+    "likely_users": "BTCUSDT watchers and Telegram Bitcoin followers; this is an inference from app behavior.",
+    "solution_flow": ["Reader joins https://t.me/bitcoin500alerts.", "Operator configures Telegram token and destination and runs/deploys the bot.", "Bot listens to Binance BTCUSDT mini-ticker and records first price as reference.", "When movement reaches configured threshold (default $500), it sends price, change, UTC time, and chart, then resets reference.", "Optional integrations publish startup/threshold updates to X and Blogger.", "Scheduler posts prior UTC day/week/month reports to Telegram and optionally Blogger."],
+    "alternatives": "Manual chart watching is implied by README.md. Named alternatives UNKNOWN - ask founder.",
+    "sources": ["README.md:34,58-62", "code.py:867-993,678-816"]
+  },
+  "audience": {
+    "likely_user_types": ["BTCUSDT watchers", "Telegram Bitcoin followers", "Readers seeking periodic BTC recaps"],
+    "pain_points": ["Repeatedly checking charts", "Wanting larger price moves delivered to Telegram", "Wanting a recap of a completed market period"],
+    "alternatives": "Manual chart watching is implied. Named tools UNKNOWN - ask founder.",
+    "region_language_currency_hints": ["English copy", "UTC timestamps/schedules", "BTCUSDT pair", "USD/USDT prices"],
+    "demographics_and_geographic_focus": "UNKNOWN - ask founder",
+    "sources": ["code.py:35-41,734-749", "README.md:34,170-189,207"]
+  },
+  "features": [
+    {"name": "BTCUSDT stream monitoring", "description": "Listens to Binance one-second mini-ticker stream and reconnects after errors.", "benefit": "Keeps listening without processing each individual trade.", "status": "Core", "sources": ["code.py:867-993", "README.md:41,58-62"]},
+    {"name": "Threshold alerts", "description": "Sends price, movement, UTC time, and chart when change from reference reaches threshold; default $500.", "benefit": "Brings larger moves to Telegram.", "status": "Core", "sources": ["code.py:35-41,938-980", "README.md:42,61"]},
+    {"name": "Startup snapshot", "description": "Sends initial price and attempts a chart at startup.", "benefit": "Shows a starting market snapshot.", "status": "Core", "sources": ["code.py:899-935"]},
+    {"name": "Branded chart", "description": "Dark Binance Spot candlesticks, BTC volume, price, @bitcoin500alerts watermark; 48 15-minute candles for regular charts.", "benefit": "Adds context to price notices.", "status": "Core", "sources": ["code.py:541-636", "README.md:47"]},
+    {"name": "Scheduled market reports", "description": "Completed day/week/month reports with OHLC, net and percent move, BTC/USDT volume, chart.", "benefit": "Provides a periodic market recap.", "status": "Core; enabled by default", "schedule_utc": {"daily": "00:05, previous day", "weekly": "Monday 00:10, previous Monday-Sunday week", "monthly": "Day 1 00:15, previous calendar month"}, "sources": ["code.py:61,678-816", "README.md:46,182,207"]},
+    {"name": "X cross-post", "description": "Uploads chart and posts startup/alert content to X.", "benefit": "Optional additional distribution.", "status": "Secondary; off by default", "sources": ["code.py:42-47,153-196,907-979", "README.md:148,176-180"]},
+    {"name": "Blogger publishing", "description": "Publishes price updates and reports with context, timestamp, Telegram link, and chart.", "benefit": "Web article version of updates.", "status": "Secondary; off by default", "sources": ["code.py:48-55,199-304,934-979", "README.md:150-159,181-189"]},
+    {"name": "Dropbox chart hosting and cleanup", "description": "Hosts Blogger images and deletes oldest bot chart images when projected account use exceeds 1.8 GB.", "benefit": "Makes charts embeddable in Blogger.", "status": "Secondary; Blogger image dependency", "caveat": "Old Blogger chart links may break after image deletion.", "sources": ["code.py:56-60,307-492", "README.md:155-159"]},
+    {"name": "Health/status endpoints", "description": "Operational routes /, /health, /status.", "benefit": "Supports host health checks.", "status": "Secondary/operational", "sources": ["code.py:824-863", "README.md:48,209-214"]}
+  ],
+  "usps": [
+    {"claim": "Threshold BTCUSDT alerts include chart snapshots.", "sources": ["code.py:938-980", "README.md:42,47"]},
+    {"claim": "Combines price alerts with completed daily, weekly, and monthly recaps.", "sources": ["code.py:678-816", "README.md:46"]},
+    {"claim": "Optional X/Blogger publishing; Dropbox-hosted charts for Blogger.", "sources": ["code.py:153-304,327-492", "README.md:44-46,150-159"]},
+    {"competitor_comparison": "UNKNOWN - ask founder; no comparative research in repo."}
+  ],
+  "pricing": {
+    "product_price_and_plans": "UNKNOWN - ask founder; no app billing or subscription code found.",
+    "license": "MIT software license; not a customer plan.",
+    "ads_affiliates_revenue": "UNKNOWN - ask founder; no ads or affiliate integration found.",
+    "limits": {"default_threshold_usd": 500, "regular_chart": "48 15-minute candles", "daily_chart": "up to 96 15-minute candles", "weekly_chart": "up to 168 one-hour candles", "monthly_chart": "up to 200 four-hour candles", "dropbox_cleanup_threshold_bytes": 1800000000},
+    "hosting": "README recommends an always-on paid Koyeb Worker for continuous service; hosting expense is not product pricing.",
+    "x_api_cost": "README says check current X Developer Console pricing; exact cost UNKNOWN.",
+    "sources": ["LICENSE", "code.py:35-41,56-61,541-564,678-682", "README.md:138-148,159"]
+  },
+  "integrations": [
+    {"service": "Binance Spot", "purpose": "BTCUSDT mini-ticker stream and public klines", "required": true, "sources": ["code.py:41,541-559,875-897"]},
+    {"service": "Telegram Bot API", "purpose": "Send text and chart photos", "required": true, "sources": ["code.py:112-150,639-675"]},
+    {"service": "X", "purpose": "Optional chart upload/post through Tweepy", "required": false, "sources": ["code.py:42-47,153-196"]},
+    {"service": "Blogger API/Google OAuth", "purpose": "Optional article/report publishing", "required": false, "sources": ["code.py:48-55,199-304", "setup_blogger.py"]},
+    {"service": "Dropbox", "purpose": "Optional Blogger chart storage and public viewer link", "required": false, "sources": ["code.py:56-60,307-492", "setup_dropbox.py"]},
+    {"service": "Docker", "purpose": "Containerized deployment", "required": false, "sources": ["Dockerfile"]},
+    {"service": "Koyeb", "purpose": "Documented hosting target", "required": false, "sources": ["README.md:138-146"]},
+    {"service": "GitHub Actions", "purpose": "Manual dependency install and bot run, five-minute timeout; not always-on hosting", "required": false, "sources": [".github/workflows/btc-bot.yml"]}
+  ],
+  "user_flow": {
+    "signup_login": "None implemented; readers join Telegram channel.",
+    "operator_onboarding": ["Create Telegram bot using BotFather", "Configure token and chat ID", "Install dependencies", "Run python code.py or deploy via Docker/Koyeb"],
+    "interactive_commands_screens": "None found; health routes are operational only.",
+    "exact_copy": [
+      {"text": "₿  *BTCUSDT · Bitcoin price* / 💵 *$[price]* / 🕒 Updated [date/time] UTC", "source": "code.py:902-906"},
+      {"text": "↑ BTCUSDT · Price alert / 💵 *$[price]* / 📊 Change: *+[change]*", "source": "code.py:947-956"},
+      {"text": "₿ BITCOIN 500 · DAILY/WEEKLY/MONTHLY REPORT", "source": "code.py:734-749"},
+      {"text": "Join our Telegram: https://t.me/bitcoin500alerts", "source": "code.py:907-912,958-964"},
+      {"text": "Market summary only · Not financial advice.", "source": "code.py:747"},
+      {"text": "TELEGRAM_TOKEN is required but not set. Exiting.", "source": "code.py:70-73"}
+    ],
+    "sources": ["README.md:75-104,114-146", "code.py:824-842"]
+  },
+  "brand": {
+    "existing_tagline": "Stay informed. Never miss a significant Bitcoin move again. ₿",
+    "local_assets": [{"path": "alert_image.png", "description": "README calls it a sample alert screenshot; runtime use not found."}],
+    "remote_readme_image": "README.md embeds a GitHub user-attachment image, not a checked-in file.",
+    "colors": {"background": "#101820", "up": "#36c98f", "down": "#ff6474", "price_line": "#65b9ff", "watermark": "@bitcoin500alerts"},
+    "logo_font": "₿ text mark; no standalone logo or brand font identified; charts use Matplotlib.",
+    "voice_inference": "Concise, factual, market-focused, with UTC time, arrows, and emojis.",
+    "draft_positioning": ["Follow significant BTCUSDT moves with chart-backed Telegram alerts.", "A Telegram-first BTCUSDT watcher with threshold alerts and periodic recaps.", "Binance Spot Bitcoin updates and historical chart summaries, delivered to Telegram."],
+    "draft_taglines": ["Bitcoin moves. Get the chart.", "BTC updates, without constant chart watching.", "A clearer view of Bitcoin moves.", "Follow BTCUSDT, one alert at a time.", "Your Bitcoin market recap on Telegram."],
+    "sources": ["README.md:2,215", "code.py:578-630,738,903"]
+  },
+  "trust": {
+    "credentials": "Tokens/OAuth values are environment variables; docs recommend secrets; .gitignore excludes env and OAuth token files.",
+    "network": "HTTPS API calls and WSS Binance stream.",
+    "data_storage": "No application database or user profile store found; runtime reference and report keys are in memory.",
+    "public_content": "Dropbox chart links use public viewer access for Blogger embedding.",
+    "metrics_testimonials": "None found; subscribers, uptime, delivery rates, testimonials UNKNOWN - ask founder.",
+    "disclaimer": "Market information only; not financial advice or trading recommendation.",
+    "privacy_terms_support": "No policy pages found; UNKNOWN - ask founder if hosted elsewhere.",
+    "security_limits": "No end-user authentication, encryption-at-rest system, audit, or certification documented.",
+    "sources": ["code.py:35-59,118,210,309,335,366,541,875", ".gitignore", "README.md:143,148,157,167-189", "LICENSE"]
+  },
+  "links": {
+    "github": {"url": "https://github.com/vyankateshpotdar/BITCOIN-500", "source": "README.md"},
+    "telegram": {"handle": "@bitcoin500alerts", "url": "https://t.me/bitcoin500alerts", "source": "code.py"},
+    "blogger_url": "UNKNOWN - ask founder.",
+    "x_profile": "UNKNOWN - ask founder.",
+    "website_store_support": "UNKNOWN - ask founder.",
+    "analytics": "No analytics integration found.",
+    "referral": "No tracked referral program found; posts include Telegram CTA.",
+    "routes": ["/", "/health", "/status"]
+  },
+  "gaps": [
+    "No marketing landing page or customer dashboard.",
+    "No analytics, conversion tracking, or referral system.",
+    "No signup/onboarding flow or interactive bot commands.",
+    "No privacy policy, terms, support contact, or public X/Blogger profile links in repo.",
+    "No audience research, competitor comparisons, product pricing, budget, testimonials, or public performance metrics.",
+    "No localization beyond English/UTC.",
+    "Old Dropbox chart deletion can break images in older Blogger posts.",
+    "Scheduled reports need the process awake; README says free Koyeb services can sleep."
+  ],
+  "quick_wins": ["Create a landing page with a Telegram CTA, threshold details, and disclaimer.", "Publish privacy, terms, and support pages.", "Add privacy-conscious visit and Telegram-click analytics.", "Pin a Telegram onboarding message explaining threshold reference, UTC schedule, and chart contents.", "Measure growth and engagement before publishing traction claims."],
+  "keywords": ["Bitcoin price alerts Telegram", "BTCUSDT alerts", "Binance Bitcoin price alerts", "Bitcoin threshold alerts", "BTC price chart Telegram", "Bitcoin candlestick chart", "BTC volume chart", "Bitcoin daily market summary", "Bitcoin weekly market report", "Bitcoin monthly market report", "BTCUSDT price update", "Binance Spot BTCUSDT", "Bitcoin market movement notifications", "Telegram crypto price updates", "Bitcoin chart snapshot"],
+  "open_questions": ["Who is the primary audience, and which countries/languages should marketing target?", "Is the audience beginner, active trader, long-term holder, or general market follower?", "Is access free, and is a paid product or revenue model planned?", "Which competitors matter and what comparison claims can be substantiated?", "Is $500 the intended public default, and can subscribers customize alerts?", "How should marketing describe the alert reference price?", "What are the official Blogger and X profile URLs?", "Is there a website, support email, privacy policy, or terms page elsewhere?", "What are the channel growth goal, launch date, and marketing budget?", "Which subscriber/reach/uptime/delivery metrics may be shared?", "Who handles incidents and user support?", "What uptime can hosting support?", "What is chart retention policy?", "Are other pairs, exchanges, languages, or reports planned?", "Should X remain enabled given possible API costs?"]
+}
