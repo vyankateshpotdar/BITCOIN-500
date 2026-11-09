@@ -146,14 +146,16 @@ The bot must already be an administrator in the Telegram channel with permission
 
 To enable optional X cross-posting, create an X Developer app with user-context read/write access, add `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, and `X_ACCESS_TOKEN_SECRET` as Koyeb Secrets, then set `X_POSTS_ENABLED=true`. X posts include the same chart and alert details plus the Telegram channel link. Cross-posting is disabled by default; check current X Developer Console pricing before enabling it.
 
-To enable free Blogger cross-posting:
+To enable Blogger cross-posting with Dropbox image hosting:
 
-1. In Google Cloud Console, create a project, enable the **Blogger API** and **Google Drive API**, and configure the OAuth consent screen. Add your Google account as a test user if the app is in testing.
+1. In Google Cloud Console, create a project, enable the **Blogger API**, and configure the OAuth consent screen. Add your Google account as a test user if the app is in testing.
 2. Create an OAuth client with type **Desktop app**, download its JSON, and save it in the project folder as `client_secret.json` (this file is ignored by Git).
-3. Install dependencies locally with `pip install -r requirements.txt`, then run `python setup_blogger.py`. Sign in with the Google account that owns the Blogger blog and choose the target blog. The script prints the four Blogger settings needed below.
-4. Add `BLOGGER_CLIENT_ID`, `BLOGGER_CLIENT_SECRET`, `BLOGGER_REFRESH_TOKEN`, and `BLOGGER_BLOG_ID` to Koyeb Secrets/environment variables, then set `BLOGGER_ENABLED=true` and redeploy.
+3. Run `python setup_blogger.py`. Sign in with the Google account that owns the Blogger blog and choose the target blog.
+4. In the [Dropbox App Console](https://www.dropbox.com/developers/apps), create a **Scoped access** app with **App folder** access. Enable `account_info.read`, `files.metadata.read`, `files.content.write`, and `sharing.write` on its Permissions tab.
+5. Run `python setup_dropbox.py` locally, enter the Dropbox app key and secret, approve access, and copy the refresh token it prints.
+6. Add the Blogger values (`BLOGGER_CLIENT_ID`, `BLOGGER_CLIENT_SECRET`, `BLOGGER_REFRESH_TOKEN`, `BLOGGER_BLOG_ID`) and Dropbox values (`DROPBOX_APP_KEY`, `DROPBOX_APP_SECRET`, `DROPBOX_REFRESH_TOKEN`) to Koyeb Secrets/environment variables. Set `BLOGGER_ENABLED=true` and redeploy.
 
-The bot publishes a Blogger post at startup and on each threshold alert with a descriptive BTCUSDT title, natural search terms, market context, update time, Telegram link, and chart image. Blogger's `posts.insert` method creates the post; the image is uploaded to Drive and embedded by URL because the Blogger API method does not provide an image upload field. The generated chart file is shared as publicly viewable so Blogger readers can load it. If Blogger was already connected before adding image support, rerun `setup_blogger.py` and replace `BLOGGER_REFRESH_TOKEN` so the token includes the new `drive.file` permission. If image upload or public sharing is unavailable, the bot still publishes the text update. For continuous publishing, set the OAuth consent screen publishing status to **In production**; Google says refresh tokens for external apps left in Testing expire after seven days.
+The bot publishes a Blogger post at startup and on each threshold alert with a descriptive BTCUSDT title, market context, update time, Telegram link, labels, and chart image. It uploads charts to Dropbox, creates a public view link, and embeds the renderable link in the post. Dropbox Basic has 2 GB of storage. Before an upload would take total account usage past 1.8 GB, the bot deletes its oldest BITCOIN 500 chart images until there is room. Blogger posts that referenced deleted charts will still have their text, but their images will no longer load. If an upload or post fails, its unused chart file is deleted. If storage is already above the threshold and there are no bot charts to remove, new Blogger posts are text-only. For continuous publishing, set the OAuth consent screen publishing status to **In production**; Google says refresh tokens for external apps left in Testing expire after seven days.
 
 ---
 
@@ -180,6 +182,9 @@ The bot publishes a Blogger post at startup and on each threshold alert with a d
 | `BLOGGER_CLIENT_SECRET` | No | — | Google OAuth desktop app client secret (store as a secret) |
 | `BLOGGER_REFRESH_TOKEN` | No | — | Offline OAuth token for Blogger publishing (store as a secret) |
 | `BLOGGER_BLOG_ID` | No | — | Numeric ID of the Blogger blog selected by `setup_blogger.py` |
+| `DROPBOX_APP_KEY` | No | — | Dropbox app key for image hosting (store as a secret) |
+| `DROPBOX_APP_SECRET` | No | — | Dropbox app secret for image hosting (store as a secret) |
+| `DROPBOX_REFRESH_TOKEN` | No | — | Offline Dropbox OAuth token (store as a secret) |
 
 ---
 

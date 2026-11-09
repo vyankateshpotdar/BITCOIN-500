@@ -6,6 +6,7 @@ import time
 import signal
 import threading
 import logging
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from io import BytesIO
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -52,6 +53,11 @@ BLOGGER_BLOG_ID = os.getenv("BLOGGER_BLOG_ID")
 BLOGGER_CREDENTIALS_READY = all((
     BLOGGER_CLIENT_ID, BLOGGER_CLIENT_SECRET, BLOGGER_REFRESH_TOKEN, BLOGGER_BLOG_ID
 ))
+DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY")
+DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
+DROPBOX_REFRESH_TOKEN = os.getenv("DROPBOX_REFRESH_TOKEN")
+DROPBOX_CREDENTIALS_READY = all((DROPBOX_APP_KEY, DROPBOX_APP_SECRET, DROPBOX_REFRESH_TOKEN))
+DROPBOX_CLEANUP_THRESHOLD_BYTES = 1_800_000_000
 
 # ===== LOGGING =====
 logging.basicConfig(
@@ -84,6 +90,8 @@ if BLOGGER_ENABLED:
         logger.info("[BLOGGER] Cross-posting is enabled")
     else:
         logger.warning("[BLOGGER] Posting is enabled but Blogger credentials are incomplete")
+    if not DROPBOX_CREDENTIALS_READY:
+        logger.warning("[BLOGGER] Dropbox image credentials are incomplete; posts will be text-only")
 
 # ===== HTTP SESSION (connection reuse for both Binance + Telegram) =====
 _http_session = requests.Session()
@@ -195,8 +203,8 @@ def _send_blogger_post(price: float, change: float = None, chart: bytes = None) 
         logger.warning("[BLOGGER] Skipping post because Blogger credentials are incomplete")
         return False
 
-    drive_file_id = None
-    access_token = None
+    dropbox_path = None
+    dropbox_access_token = None
     try:
         token_response = _http_session.post(
             "https://oauth2.googleapis.com/token",
@@ -217,10 +225,14 @@ def _send_blogger_post(price: float, change: float = None, chart: bytes = None) 
             return False
 
         chart_url = None
-        if chart:
-            uploaded = _upload_blogger_chart(access_token, chart)
-            if uploaded:
-                chart_url, drive_file_id = uploaded
+        if chart and DROPBOX_CREDENTIALS_READY:
+            try:
+                dropbox_access_token = _get_dropbox_access_token()
+                uploaded = _upload_blogger_chart(dropbox_access_token, chart)
+                if uploaded:
+                    chart_url, dropbox_path = uploaded
+            except (requests.RequestException, ValueError) as error:
+                logger.warning("[BLOGGER] Image hosting failed; publishing text only: %s", error)
         title, html_content = _blogger_content(price, change, chart_url)
 
         response = _http_session.post(
@@ -237,15 +249,15 @@ def _send_blogger_post(price: float, change: float = None, chart: bytes = None) 
         )
         if response.status_code != 200:
             logger.warning("[BLOGGER] Post failed: HTTP %s body=%s", response.status_code, response.text[:500])
-            if drive_file_id:
-                _delete_blogger_chart(access_token, drive_file_id)
+            if dropbox_path and dropbox_access_token:
+                _delete_blogger_chart(dropbox_access_token, dropbox_path)
             return False
         post = response.json()
         logger.info("[BLOGGER] Post published (post_id=%s url=%s)", post.get("id"), post.get("url"))
         return True
     except (requests.RequestException, ValueError) as error:
-        if drive_file_id and access_token:
-            _delete_blogger_chart(access_token, drive_file_id)
+        if dropbox_path and dropbox_access_token:
+            _delete_blogger_chart(dropbox_access_token, dropbox_path)
         logger.warning("[BLOGGER] Post failed: %s", error)
         return False
 
@@ -263,67 +275,192 @@ def send_blogger_post_async(price: float, change: float = None, chart: bytes = N
     worker.start()
 
 
-def _upload_blogger_chart(access_token: str, chart: bytes):
-    """Upload a chart to Drive and make only that chart publicly viewable."""
-    boundary = f"bitcoin500-{time.time_ns()}"
-    metadata = json.dumps({
-        "name": f"bitcoin500-btcusdt-{int(time.time())}.png",
-        "mimeType": "image/png",
-    }).encode("utf-8")
-    body = (
-        f"--{boundary}\r\n".encode()
-        + b"Content-Type: application/json; charset=UTF-8\r\n\r\n"
-        + metadata
-        + f"\r\n--{boundary}\r\n".encode()
-        + b"Content-Type: image/png\r\n\r\n"
-        + chart
-        + f"\r\n--{boundary}--\r\n".encode()
-    )
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": f"multipart/related; boundary={boundary}",
-    }
-    upload = _http_session.post(
-        "https://www.googleapis.com/upload/drive/v3/files",
-        params={"uploadType": "multipart", "fields": "id"},
-        headers=headers,
-        data=body,
-        timeout=30,
-    )
-    if upload.status_code not in (200, 201):
-        logger.warning("[BLOGGER] Chart upload to Drive failed: HTTP %s", upload.status_code)
-        return None
-
-    file_id = upload.json().get("id")
-    if not file_id:
-        logger.warning("[BLOGGER] Drive upload returned no file ID")
-        return None
-
-    permission = _http_session.post(
-        f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions",
-        headers={**headers, "Content-Type": "application/json"},
-        json={"type": "anyone", "role": "reader"},
-        params={"fields": "id"},
+def _get_dropbox_access_token() -> str:
+    """Exchange the stored Dropbox refresh token for a short-lived access token."""
+    response = _http_session.post(
+        "https://api.dropbox.com/oauth2/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": DROPBOX_REFRESH_TOKEN,
+            "client_id": DROPBOX_APP_KEY,
+            "client_secret": DROPBOX_APP_SECRET,
+        },
         timeout=15,
     )
-    if permission.status_code not in (200, 201):
-        logger.warning("[BLOGGER] Could not make chart publicly viewable: HTTP %s", permission.status_code)
-        _delete_blogger_chart(access_token, file_id)
+    if response.status_code != 200:
+        raise requests.HTTPError(f"Dropbox token refresh failed: HTTP {response.status_code}")
+    access_token = response.json().get("access_token")
+    if not access_token:
+        raise ValueError("Dropbox token refresh returned no access token")
+    return access_token
+
+
+def _upload_blogger_chart(access_token: str, chart: bytes):
+    """Upload a chart to the Dropbox app folder and return a public render link."""
+    if not _make_dropbox_room(access_token, len(chart)):
+        logger.warning("[BLOGGER] Skipping chart upload; Dropbox usage is above the limit and no old charts can be removed")
         return None
 
-    return f"https://drive.google.com/uc?export=view&id={file_id}", file_id
-
-
-def _delete_blogger_chart(access_token: str, file_id: str) -> None:
-    """Best-effort cleanup for a Drive image that wasn't embedded in a post."""
+    path = f"/bitcoin500-btcusdt-{int(time.time() * 1000)}.png"
     try:
-        _http_session.delete(
-            f"https://www.googleapis.com/drive/v3/files/{file_id}",
-            headers={"Authorization": f"Bearer {access_token}"},
+        upload = _http_session.post(
+            "https://content.dropboxapi.com/2/files/upload",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Dropbox-API-Arg": json.dumps({
+                    "path": path,
+                    "mode": "add",
+                    "autorename": True,
+                    "mute": True,
+                    "strict_conflict": False,
+                }),
+                "Content-Type": "application/octet-stream",
+            },
+            data=chart,
+            timeout=30,
+        )
+    except requests.RequestException:
+        _delete_blogger_chart(access_token, path)
+        raise
+    if upload.status_code not in (200, 201):
+        logger.warning("[BLOGGER] Chart upload to Dropbox failed: HTTP %s", upload.status_code)
+        _delete_blogger_chart(access_token, path)
+        return None
+
+    try:
+        result = upload.json()
+    except ValueError:
+        _delete_blogger_chart(access_token, path)
+        raise
+    path = result.get("path_lower", path)
+    try:
+        shared = _http_session.post(
+            "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "path": path,
+                "settings": {
+                    "audience": {".tag": "public"},
+                    "access": {".tag": "viewer"},
+                    "requested_visibility": {".tag": "public"},
+                },
+            },
+            timeout=20,
+        )
+    except requests.RequestException:
+        _delete_blogger_chart(access_token, path)
+        raise
+    if shared.status_code not in (200, 201):
+        logger.warning("[BLOGGER] Could not create a Dropbox view link: HTTP %s", shared.status_code)
+        _delete_blogger_chart(access_token, path)
+        return None
+
+    try:
+        link = shared.json().get("url")
+    except ValueError:
+        _delete_blogger_chart(access_token, path)
+        raise
+    if not link:
+        logger.warning("[BLOGGER] Dropbox returned no shared link")
+        _delete_blogger_chart(access_token, path)
+        return None
+    parts = urlsplit(link)
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["raw"] = "1"
+    query.pop("dl", None)
+    render_url = urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    return render_url, path
+
+
+def _make_dropbox_room(access_token: str, incoming_bytes: int) -> bool:
+    """Keep total Dropbox use below 1.8 GB by deleting oldest bot charts first."""
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    usage_response = _http_session.post(
+        "https://api.dropboxapi.com/2/users/get_space_usage",
+        headers=headers,
+        json={},
+        timeout=15,
+    )
+    if usage_response.status_code != 200:
+        logger.warning("[BLOGGER] Could not read Dropbox storage use: HTTP %s", usage_response.status_code)
+        return False
+    used_bytes = int(usage_response.json().get("used", 0))
+    if used_bytes + incoming_bytes <= DROPBOX_CLEANUP_THRESHOLD_BYTES:
+        return True
+
+    first_page = _http_session.post(
+        "https://api.dropboxapi.com/2/files/list_folder",
+        headers=headers,
+        json={"path": "", "recursive": False, "limit": 2000},
+        timeout=20,
+    )
+    if first_page.status_code != 200:
+        logger.warning("[BLOGGER] Could not list Dropbox charts for cleanup: HTTP %s", first_page.status_code)
+        return False
+
+    listing = first_page.json()
+    entries = list(listing.get("entries", []))
+    while listing.get("has_more"):
+        page = _http_session.post(
+            "https://api.dropboxapi.com/2/files/list_folder/continue",
+            headers=headers,
+            json={"cursor": listing["cursor"]},
+            timeout=20,
+        )
+        if page.status_code != 200:
+            logger.warning("[BLOGGER] Could not continue Dropbox chart listing: HTTP %s", page.status_code)
+            return False
+        listing = page.json()
+        entries.extend(listing.get("entries", []))
+
+    chart_files = [
+        entry for entry in entries
+        if entry.get(".tag") == "file" and entry.get("name", "").startswith("bitcoin500-btcusdt-")
+    ]
+    chart_files.sort(key=lambda entry: entry.get("server_modified", ""))
+    for file in chart_files:
+        if used_bytes + incoming_bytes <= DROPBOX_CLEANUP_THRESHOLD_BYTES:
+            break
+        deletion = _http_session.post(
+            "https://api.dropboxapi.com/2/files/delete_v2",
+            headers=headers,
+            json={"path": file.get("id") or file.get("path_lower")},
             timeout=15,
         )
+        if deletion.status_code not in (200, 201):
+            logger.warning("[BLOGGER] Could not delete oldest chart %s: HTTP %s", file.get("name"), deletion.status_code)
+            continue
+        used_bytes = max(0, used_bytes - int(file.get("size", 0)))
+        logger.info(
+            "[BLOGGER] Deleted oldest chart %s to keep Dropbox below 1.8 GB",
+            file.get("name"),
+        )
+
+    return used_bytes + incoming_bytes <= DROPBOX_CLEANUP_THRESHOLD_BYTES
+
+
+def _delete_blogger_chart(access_token: str, path: str) -> None:
+    """Delete a Dropbox chart only when it failed to become part of a Blogger post."""
+    try:
+        response = _http_session.post(
+            "https://api.dropboxapi.com/2/files/delete_v2",
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Content-Type": "application/json",
+            },
+            json={"path": path},
+            timeout=15,
+        )
+        if response.status_code not in (200, 201):
+            logger.warning("[BLOGGER] Could not clean up unused Dropbox chart: HTTP %s", response.status_code)
     except requests.RequestException as error:
-        logger.warning("[BLOGGER] Could not clean up unused chart file: %s", error)
+        logger.warning("[BLOGGER] Could not clean up unused Dropbox chart: %s", error)
 
 
 def _blogger_content(price: float, change: float = None, chart_url: str = None):

@@ -9,7 +9,6 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = [
     "https://www.googleapis.com/auth/blogger",
-    "https://www.googleapis.com/auth/drive.file",
 ]
 CLIENT_FILE = Path(__file__).with_name("client_secret.json")
 
@@ -62,8 +61,7 @@ def main():
     print(f"BLOGGER_REFRESH_TOKEN={credentials.refresh_token}")
     print(f"BLOGGER_BLOG_ID={blog['id']}")
     print("BLOGGER_ENABLED=true")
-    print("\nEnable both Blogger API and Google Drive API in this Cloud project.")
-    print("The bot uploads each chart to Drive and makes that chart publicly viewable so Blogger can display it.")
+    print("\nEnable the Blogger API in this Google Cloud project.")
 
 
 if __name__ == "__main__":
