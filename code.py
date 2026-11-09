@@ -5,10 +5,12 @@ import time
 import signal
 import threading
 import logging
+from io import BytesIO
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import requests
 import websocket
+import tweepy
 import matplotlib
 
 matplotlib.use("Agg")
@@ -35,6 +37,12 @@ PRICE_THRESHOLD = float(os.getenv("PRICE_THRESHOLD", "500"))
 PRICE_LOG_INTERVAL = float(os.getenv("PRICE_LOG_INTERVAL", "10"))
 SYMBOL = os.getenv("SYMBOL", "BTCUSDT")
 BINANCE_BASE_URL = os.getenv("BINANCE_BASE_URL", "https://data-api.binance.vision")
+X_POSTS_ENABLED = os.getenv("X_POSTS_ENABLED", "false").lower() in ("1", "true", "yes")
+X_API_KEY = os.getenv("X_API_KEY")
+X_API_SECRET = os.getenv("X_API_SECRET")
+X_ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
+X_ACCESS_TOKEN_SECRET = os.getenv("X_ACCESS_TOKEN_SECRET")
+X_CREDENTIALS_READY = all((X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET))
 
 # ===== LOGGING =====
 logging.basicConfig(
@@ -55,6 +63,12 @@ if PRICE_THRESHOLD <= 0:
 if PRICE_LOG_INTERVAL <= 0:
     logger.critical("PRICE_LOG_INTERVAL must be > 0, got %s. Exiting.", PRICE_LOG_INTERVAL)
     sys.exit(1)
+
+if X_POSTS_ENABLED:
+    if X_CREDENTIALS_READY:
+        logger.info("[X] Cross-posting is enabled")
+    else:
+        logger.warning("[X] Posting is enabled but one or more X API credentials are missing")
 
 # ===== HTTP SESSION (connection reuse for both Binance + Telegram) =====
 _http_session = requests.Session()
@@ -110,6 +124,52 @@ def send_telegram(text: str) -> bool:
     except requests.RequestException as e:
         logger.exception("Telegram request error: %s", e)
         return False
+
+
+def _send_x_chart(text: str, chart: bytes) -> bool:
+    """Upload the alert chart and publish it using X account user-context auth."""
+    if not X_POSTS_ENABLED:
+        return False
+    if not X_CREDENTIALS_READY:
+        logger.warning("[X] Skipping post because X API credentials are incomplete")
+        return False
+
+    try:
+        auth = tweepy.OAuth1UserHandler(
+            X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET
+        )
+        api = tweepy.API(auth)
+        media = api.media_upload(
+            filename="bitcoin500-chart.png",
+            file=BytesIO(chart),
+            media_category="tweet_image",
+        )
+        client = tweepy.Client(
+            consumer_key=X_API_KEY,
+            consumer_secret=X_API_SECRET,
+            access_token=X_ACCESS_TOKEN,
+            access_token_secret=X_ACCESS_TOKEN_SECRET,
+        )
+        result = client.create_tweet(text=text, media_ids=[str(media.media_id)])
+        post_id = result.data.get("id") if result.data else None
+        logger.info("[X] Chart post accepted (post_id=%s)", post_id)
+        return True
+    except Exception as error:
+        logger.exception("[X] Chart post failed: %s", error)
+        return False
+
+
+def send_x_chart_async(text: str, chart: bytes) -> None:
+    """Post in the background so X API latency won't pause price monitoring."""
+    if not X_POSTS_ENABLED:
+        return
+    worker = threading.Thread(
+        target=_send_x_chart,
+        args=(text, chart),
+        name="x-crosspost",
+        daemon=True,
+    )
+    worker.start()
 
 
 def _get_chart_candles(symbol: str, limit: int = 48):
@@ -195,17 +255,17 @@ def _create_chart(symbol: str, current_price: float) -> bytes:
     price_ax.set_title(f"LIVE PRICE   ${current_price:,.2f}", loc="left", color="#65b9ff", fontsize=10, pad=10)
     fig.subplots_adjust(left=0.08, right=0.94, top=0.88, bottom=0.12)
 
-    from io import BytesIO
     image = BytesIO()
     fig.savefig(image, format="png", facecolor=background, bbox_inches="tight")
     plt.close(fig)
     return image.getvalue()
 
 
-def send_telegram_chart(caption: str, price: float) -> bool:
+def send_telegram_chart(caption: str, price: float, chart: bytes = None) -> bool:
     """Send a chart photo with a caption; return False so callers can fall back to text."""
     try:
-        chart = _create_chart(SYMBOL, price)
+        if chart is None:
+            chart = _create_chart(SYMBOL, price)
     except Exception as error:
         logger.warning("Chart generation failed; sending text only: %s", error)
         return False
@@ -328,8 +388,19 @@ def btc_loop() -> None:
                         f"💵  *${price:,.2f}*\n\n"
                         f"🕒  Updated {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC"
                     )
+                    x_startup_message = (
+                        f"₿ {SYMBOL} · Bitcoin price\n\n"
+                        f"💵 ${price:,.2f}\n"
+                        f"🕒 Updated {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC\n\n"
+                        "Join our Telegram: https://t.me/bitcoin500alerts"
+                    )
+                    try:
+                        chart = _create_chart(SYMBOL, price)
+                    except Exception as error:
+                        logger.warning("Chart generation failed; sending text only: %s", error)
+                        chart = None
                     for attempt in range(1, 4):
-                        delivered = send_telegram_chart(startup_message, price)
+                        delivered = send_telegram_chart(startup_message, price, chart) if chart else False
                         if not delivered:
                             delivered = send_telegram(startup_message)
                         if delivered:
@@ -340,6 +411,10 @@ def btc_loop() -> None:
                             _stop_event.wait(delay)
                     else:
                         logger.error("[STARTUP MESSAGE] Could not deliver startup price after 3 attempts")
+                    if chart:
+                        send_x_chart_async(x_startup_message, chart)
+                    elif X_POSTS_ENABLED:
+                        logger.warning("[X] Startup cross-post skipped because the chart couldn't be created")
                     continue
 
                 diff = price - reference_price
@@ -361,9 +436,27 @@ def btc_loop() -> None:
                         f"📊  Change: *{sign}${diff:,.2f}*\n\n"
                         f"🕒  {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC"
                     )
+                    x_move_sign = "+" if diff > 0 else "−"
+                    x_msg = (
+                        f"{arrow} {SYMBOL} · BTC price alert\n\n"
+                        f"💵 ${price:,.2f}\n"
+                        f"📊 Change: {x_move_sign}${abs(diff):,.2f}\n"
+                        f"🕒 {datetime.now(timezone.utc).strftime('%d %b %Y, %H:%M:%S')} UTC\n\n"
+                        "Join our Telegram: https://t.me/bitcoin500alerts"
+                    )
                     logger.info("[ALERT] Threshold crossed: %s %+.2f USD", SYMBOL, diff)
-                    if not send_telegram_chart(msg, price):
+                    try:
+                        chart = _create_chart(SYMBOL, price)
+                    except Exception as error:
+                        logger.warning("Chart generation failed; sending text only: %s", error)
+                        chart = None
+                    delivered = send_telegram_chart(msg, price, chart) if chart else False
+                    if not delivered:
                         send_telegram(msg)
+                    if chart:
+                        send_x_chart_async(x_msg, chart)
+                    elif X_POSTS_ENABLED:
+                        logger.warning("[X] Alert cross-post skipped because the chart couldn't be created")
                     reference_price = price
 
         except (websocket.WebSocketException, requests.RequestException, OSError, ValueError, KeyError) as e:

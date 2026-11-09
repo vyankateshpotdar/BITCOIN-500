@@ -41,6 +41,7 @@ A real-time Bitcoin price alert bot that watches the market 24/7 and sends insta
 - **Real-Time Price Monitoring** — Receives Binance's once-per-second mini-ticker updates over a persistent WebSocket connection, keeping CPU usage lower than processing every individual trade.
 - **Smart Threshold Alerts** — Only triggers when the price moves ±$500, reducing alert fatigue.
 - **Telegram Notifications** — Sends formatted alerts directly to your Telegram chat or channel.
+- **Optional X Cross-posting** — Can post the same chart and alert details to X, with a Telegram channel link.
 - **Branded Chart Snapshots** — Sends a 12-hour candlestick chart with volume, live price, and an @bitcoin500alerts watermark at startup and on threshold alerts.
 - **Health Check Server** — Built-in HTTP server with `/health` and `/status` endpoints for uptime monitoring.
 - **Docker Ready** — Fully containerized for easy deployment anywhere.
@@ -142,6 +143,8 @@ docker run -d \
 
 The bot must already be an administrator in the Telegram channel with permission to post. If you choose a **Web Service** instead of a Worker, expose port `8000` as HTTP and use `/health` as the health-check path. This is suitable for a test deployment, but a Free instance can sleep after an hour without inbound traffic, so it is not reliable for uninterrupted alerts.
 
+To enable optional X cross-posting, create an X Developer app with user-context read/write access, add `X_API_KEY`, `X_API_SECRET`, `X_ACCESS_TOKEN`, and `X_ACCESS_TOKEN_SECRET` as Koyeb Secrets, then set `X_POSTS_ENABLED=true`. X posts include the same chart and alert details plus the Telegram channel link. Cross-posting is disabled by default; check current X Developer Console pricing before enabling it.
+
 ---
 
 ## Environment Variables
@@ -157,6 +160,11 @@ The bot must already be an administrator in the Telegram channel with permission
 | `BINANCE_API_KEY` | No | — | Binance API key (optional for public data) |
 | `BINANCE_API_SECRET` | No | — | Binance API secret |
 | `LOG_LEVEL` | No | `INFO` | Logging level (`DEBUG`, `INFO`, `WARNING`, etc.) |
+| `X_POSTS_ENABLED` | No | `false` | Set to `true` to cross-post startup and threshold charts to X |
+| `X_API_KEY` | No | — | X Developer app API key (store as a secret) |
+| `X_API_SECRET` | No | — | X Developer app API secret (store as a secret) |
+| `X_ACCESS_TOKEN` | No | — | X account user access token (store as a secret) |
+| `X_ACCESS_TOKEN_SECRET` | No | — | X account user access token secret (store as a secret) |
 
 ---
 
